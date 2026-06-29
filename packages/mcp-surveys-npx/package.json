@@ -4,7 +4,7 @@
   "description": "Tiny npx CLI for the hosted mcp-surveys API.",
   "type": "module",
   "bin": {
-    "mcp-surveys-cli": "./bin/mcp-surveys-cli.js"
+    "mcp-surveys-cli": "bin/mcp-surveys-cli.js"
   },
   "files": [
     "bin"
