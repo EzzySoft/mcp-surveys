@@ -15,7 +15,7 @@ from mcp_surveys.limits import (
 )
 
 
-QuestionType = Literal["single_choice", "multiple_choice", "ranking", "matching", "text"]
+QuestionType = Literal["single_choice", "multiple_choice", "ranking", "matching", "scale", "text"]
 ExportFormat = Literal["json", "markdown"]
 
 
@@ -37,6 +37,11 @@ class Question(ApiModel):
     left: list[Option] = Field(default_factory=list, max_length=MAX_OPTIONS_PER_LIST)
     right: list[Option] = Field(default_factory=list, max_length=MAX_OPTIONS_PER_LIST)
     allow_custom: bool = True
+    min: int | None = None
+    max: int | None = None
+    step: int | None = Field(default=None, gt=0)
+    min_label: str | None = Field(default=None, max_length=MAX_OPTION_CHARS)
+    max_label: str | None = Field(default=None, max_length=MAX_OPTION_CHARS)
 
     @model_validator(mode="after")
     def validate_shape(self) -> "Question":
@@ -44,8 +49,14 @@ class Question(ApiModel):
             raise ValueError(f"{self.type} requires at least two options")
         if self.type == "matching" and (not self.left or not self.right):
             raise ValueError("matching requires left and right items")
-        if self.type == "text" and (self.options or self.left or self.right):
-            raise ValueError("text questions cannot have options, left, or right")
+        if self.type in {"scale", "text"} and (self.options or self.left or self.right):
+            raise ValueError(f"{self.type} questions cannot have options, left, or right")
+        if self.type == "scale":
+            self.min = 0 if self.min is None else self.min
+            self.max = 100 if self.max is None else self.max
+            self.step = 1 if self.step is None else self.step
+            if self.min >= self.max:
+                raise ValueError("scale min must be less than max")
         return self
 
 

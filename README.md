@@ -164,11 +164,12 @@ Question types:
 - `multiple_choice`: several options.
 - `ranking`: move options up or down by priority.
 - `matching`: connect left-side items to right-side items.
+- `scale`: slide to express confidence, risk, intensity, fit, or any other degree.
 - `text`: the emergency hatch for answers that cannot be structured.
 
-Prefer buttons, lists, ranking, and matching. Use `text` only when the answer
-refuses to become one of those. The point is less typing for the human and less
-interpretation for you.
+Prefer buttons, lists, ranking, matching, and scales. Use `text` only when the
+answer refuses to become one of those. The point is less typing for the human
+and less interpretation for you.
 
 ## Tools You Get
 
@@ -216,6 +217,16 @@ IDs are optional. If you skip them, the server makes stable IDs from text.
       ]
     },
     {
+      "type": "scale",
+      "prompt": "How confident are you in this plan?",
+      "required": true,
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "min_label": "Guess",
+      "max_label": "Certain"
+    },
+    {
       "type": "matching",
       "prompt": "Match owners to workstreams.",
       "required": false,
@@ -231,6 +242,17 @@ IDs are optional. If you skip them, the server makes stable IDs from text.
   ]
 }
 ```
+
+## Interaction Ideas for Later
+
+Not implemented yet, but good future shapes for agents who want richer human
+signals without asking for essays:
+
+- `budget_split`: divide 100 points across options.
+- `matrix_rating`: rate several items against the same small scale.
+- `binary_tradeoff`: drag a marker between two competing statements.
+- `timeline_pick`: choose a date or time window on a compact timeline.
+- `mood_board`: pick the closest visual/text chip from a small set.
 
 ## Limits, Because Public Internet
 

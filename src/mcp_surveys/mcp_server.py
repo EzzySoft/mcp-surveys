@@ -28,8 +28,9 @@ def build_mcp(service: SurveyService) -> FastMCP:
         "mcp-surveys",
         instructions=(
             "Create short-lived, tappable surveys for humans when plain chat would be clumsy. "
-            "Prefer single_choice, multiple_choice, ranking, or matching. Use text only when "
-            "the answer cannot be represented by the other question types. Public links expire; "
+            "Prefer single_choice, multiple_choice, ranking, matching, or scale. Use scale for "
+            "confidence, intensity, risk, fit, or other degree answers. Use text only when the "
+            "answer cannot be represented by the other question types. Public links expire; "
             "never expose result_token to the respondent."
         ),
     )
@@ -91,6 +92,7 @@ def build_mcp(service: SurveyService) -> FastMCP:
             "multiple_choice": {"value": ["option_id"], "custom_options": {"custom:id": "text"}},
             "ranking": {"value": ["first_option_id", "second_option_id"]},
             "matching": {"left_item_id": "right_item_id"},
+            "scale": {"value": 75, "fields": {"min": 0, "max": 100, "step": 5, "min_label": "Guess", "max_label": "Certain"}},
             "text": "Use only when other types cannot express the answer.",
             "limits": {
                 "questions": 50,

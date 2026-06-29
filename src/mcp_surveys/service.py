@@ -234,6 +234,8 @@ class SurveyService:
                 raise SurveyValidationError("ranking answer must include every option exactly once")
         elif question.type == "matching":
             self._validate_matching(answer.value, question)
+        elif question.type == "scale":
+            self._validate_scale(answer.value, question)
         elif question.type == "text":
             if not isinstance(answer.value, str) or len(answer.value) > MAX_TEXT_ANSWER_CHARS:
                 raise SurveyValidationError(f"text answers must be strings up to {MAX_TEXT_ANSWER_CHARS} characters")
@@ -274,6 +276,16 @@ class SurveyService:
             raise SurveyValidationError("matching answer must be a left_id -> right_id object")
         if set(value) - left_ids or any(item not in right_ids for item in value.values()):
             raise SurveyValidationError("matching answer contains unknown item ids")
+
+    @staticmethod
+    def _validate_scale(value: Any, question: Question) -> None:
+        scale_min = question.min if question.min is not None else 0
+        scale_max = question.max if question.max is not None else 100
+        step = question.step if question.step is not None else 1
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise SurveyValidationError("scale answer must be an integer")
+        if value < scale_min or value > scale_max or (value - scale_min) % step:
+            raise SurveyValidationError("scale answer is outside the allowed range")
 
     def _ttl_for(self, survey: Survey) -> int:
         return max(1, int((survey.expires_at - now_utc()).total_seconds()))

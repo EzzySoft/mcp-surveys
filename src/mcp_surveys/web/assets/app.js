@@ -243,6 +243,42 @@ function renderText(question) {
   return wrapper;
 }
 
+function renderScale(question) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "scale-answer";
+  const min = Number.isFinite(question.min) ? question.min : 0;
+  const max = Number.isFinite(question.max) ? question.max : 100;
+  const step = Number.isFinite(question.step) ? question.step : 1;
+  const answer = currentAnswer(question);
+  const fallback = Math.round(((min + max) / 2 - min) / step) * step + min;
+  const value = Number.isFinite(Number(answer?.value)) ? Number(answer.value) : fallback;
+
+  const valueRow = document.createElement("div");
+  valueRow.className = "scale-value-row";
+  const minLabel = document.createElement("span");
+  minLabel.textContent = question.min_label || String(min);
+  const output = document.createElement("strong");
+  output.textContent = String(value);
+  const maxLabel = document.createElement("span");
+  maxLabel.textContent = question.max_label || String(max);
+  valueRow.append(minLabel, output, maxLabel);
+
+  const input = document.createElement("input");
+  input.type = "range";
+  input.min = String(min);
+  input.max = String(max);
+  input.step = String(step);
+  input.value = String(value);
+  input.addEventListener("input", () => {
+    const next = Number(input.value);
+    output.textContent = String(next);
+    save(question, next);
+  });
+
+  wrapper.append(valueRow, input);
+  return wrapper;
+}
+
 function renderQuestion(question) {
   const existing = document.querySelector(`[data-question-id="${question.id}"]`);
   const section = existing || document.createElement("article");
@@ -264,6 +300,7 @@ function renderQuestion(question) {
   if (question.type === "multiple_choice") section.append(renderChoice(question, true));
   if (question.type === "ranking") section.append(renderRanking(question));
   if (question.type === "matching") section.append(renderMatching(question));
+  if (question.type === "scale") section.append(renderScale(question));
   if (question.type === "text") section.append(renderText(question));
 
   if (!existing) $("questions").append(section);

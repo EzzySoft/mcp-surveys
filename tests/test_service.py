@@ -67,6 +67,33 @@ async def test_create_save_complete_and_read_answers():
 
 
 @pytest.mark.asyncio
+async def test_scale_question_accepts_number_in_range():
+    service = SurveyService(MemoryStore(), "https://survey.test", 3600, 10800)
+    created = await service.create_survey(
+        CreateSurveyRequest(
+            title="Confidence",
+            questions=[
+                Question(
+                    type="scale",
+                    prompt="How confident are you?",
+                    min=0,
+                    max=100,
+                    step=5,
+                    min_label="Guess",
+                    max_label="Certain",
+                )
+            ],
+        ),
+        client_key="127.0.0.1",
+    )
+
+    await service.save_answer(created.survey_id, "how-confident-are-you", AnswerIn(value=75))
+    answers = await service.get_answers(created.survey_id, created.result_token)
+
+    assert answers.answers[0].answer == 75
+
+
+@pytest.mark.asyncio
 async def test_rate_limit_blocks_create():
     service = SurveyService(MemoryStore(), "https://survey.test", 3600, 10800, rate_limiter=CountingLimiter(1))
 

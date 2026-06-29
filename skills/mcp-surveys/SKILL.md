@@ -13,6 +13,7 @@ Use `mcp-surveys` when chat text is a poor fit for collecting human input. Prefe
 - Use `multiple_choice` when several options may apply.
 - Use `ranking` when order matters.
 - Use `matching` when the person should connect left-side items to right-side items.
+- Use `scale` when the person should express confidence, intensity, risk, fit, or any other degree.
 - Use `text` only when the answer cannot be represented by the structured formats above.
 
 Do not create a survey for one simple yes/no question unless the user experience clearly benefits from a link.
