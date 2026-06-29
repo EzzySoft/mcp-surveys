@@ -1,14 +1,57 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import PlainTextResponse
 
 from mcp_surveys.errors import RateLimitExceeded, SurveyForbidden, SurveyLocked, SurveyNotFound, SurveyValidationError
-from mcp_surveys.models import AnswerIn
+from mcp_surveys.http import client_key
+from mcp_surveys.models import (
+    AgentExportRequest,
+    AgentSurveyPatch,
+    AnswerIn,
+    CreateSurveyRequest,
+    ResultTokenRequest,
+    SurveyPatch,
+)
+from mcp_surveys.schema import question_schema
 from mcp_surveys.service import SurveyService
 
 
 def api_router(service: SurveyService) -> APIRouter:
     router = APIRouter(prefix="/api")
+
+    @router.post("/agent/surveys")
+    async def create_agent_survey(payload: CreateSurveyRequest, request: Request):
+        return await service.create_survey(payload, client_key=client_key(request))
+
+    @router.patch("/agent/surveys/{survey_id}")
+    async def edit_agent_survey(survey_id: str, payload: AgentSurveyPatch):
+        patch = SurveyPatch(title=payload.title, description=payload.description, questions=payload.questions)
+        return await service.edit_survey(survey_id, payload.result_token, patch)
+
+    @router.post("/agent/surveys/{survey_id}/state")
+    async def get_agent_survey(survey_id: str, payload: ResultTokenRequest):
+        return await service.get_survey(survey_id, payload.result_token)
+
+    @router.post("/agent/surveys/{survey_id}/summary")
+    async def get_agent_summary(survey_id: str, payload: ResultTokenRequest):
+        return await service.get_summary(survey_id, payload.result_token)
+
+    @router.post("/agent/surveys/{survey_id}/answers")
+    async def get_agent_answers(survey_id: str, payload: ResultTokenRequest):
+        return await service.get_answers(survey_id, payload.result_token)
+
+    @router.post("/agent/surveys/{survey_id}/answers/{question_id}")
+    async def get_agent_question_answer(survey_id: str, question_id: str, payload: ResultTokenRequest):
+        return await service.get_question_answer(survey_id, payload.result_token, question_id)
+
+    @router.post("/agent/surveys/{survey_id}/export")
+    async def export_agent_answers(survey_id: str, payload: AgentExportRequest):
+        return PlainTextResponse(await service.export_answers(survey_id, payload.result_token, payload.format))
+
+    @router.get("/agent/question-schema")
+    async def get_question_schema():
+        return question_schema()
 
     @router.get("/surveys/{survey_id}")
     async def get_survey(survey_id: str):

@@ -36,6 +36,34 @@ Client syntax receipts:
 [Claude Code MCP](https://docs.anthropic.com/en/docs/claude-code/mcp),
 [OpenCode MCP servers](https://opencode.ai/docs/mcp-servers).
 
+### Tiny CLI for You
+
+If MCP setup is not worth the context rent, use the CLI. Same hosted instance,
+same short-lived links, fewer moving parts:
+
+```bash
+uvx mcp-surveys-cli schema
+uvx mcp-surveys-cli create survey.json
+uvx mcp-surveys-cli summary <survey_id> <result_token>
+uvx mcp-surveys-cli answers <survey_id> <result_token>
+uvx mcp-surveys-cli export <survey_id> <result_token> --format markdown
+```
+
+Before the first PyPI release, run it from this checkout:
+
+```bash
+uvx --from ./packages/mcp-surveys-cli mcp-surveys-cli schema
+```
+
+Or directly from GitHub:
+
+```bash
+uvx --from "git+https://github.com/EzzySoft/mcp-surveys.git#subdirectory=packages/mcp-surveys-cli" mcp-surveys-cli schema
+```
+
+The CLI prints JSON except `export`, which prints Markdown by default. Send only
+`public_url` to the human. Keep `result_token` in your agent pocket.
+
 ### Codex
 
 Add this to `~/.codex/config.toml` or project `.codex/config.toml`:
@@ -189,6 +217,15 @@ human and less interpretation for you.
 Use `edit_survey` for tiny repairs. If you are rewriting the whole thing,
 create a new survey. Your future self will thank you by not needing a graph.
 
+CLI equivalents:
+
+```bash
+mcp-surveys-cli create survey.json
+mcp-surveys-cli edit <survey_id> <result_token> patch.json
+mcp-surveys-cli get <survey_id> <result_token>
+mcp-surveys-cli question <survey_id> <result_token> <question_id>
+```
+
 ## Example Payload
 
 IDs are optional. If you skip them, the server makes stable IDs from text.
@@ -288,7 +325,7 @@ The hosted instance is intentionally small and Redis-backed:
 
 Survey IDs and result tokens are secure random URL-safe tokens. The public link
 is a capability URL: anyone with it can answer until it expires. The private
-`result_token` is required to read answers through MCP.
+`result_token` is required to read answers through MCP or the CLI.
 
 ## Self-Hosting, If You Must
 
@@ -316,6 +353,27 @@ Local development without Docker:
 uv sync --extra dev
 REDIS_URL=redis://localhost:6379/0 uv run mcp-surveys
 ```
+
+### Publishing the CLI
+
+Package target: `mcp-surveys-cli`.
+
+One-time PyPI setup:
+
+- create or claim the `mcp-surveys-cli` PyPI project;
+- add a Trusted Publisher for `EzzySoft/mcp-surveys`;
+- workflow: `.github/workflows/publish-cli.yml`;
+- environment: leave empty unless PyPI asks for one.
+
+Release:
+
+```bash
+git tag cli-v0.1.0
+git push origin cli-v0.1.0
+```
+
+The workflow builds `packages/mcp-surveys-cli` and publishes with trusted
+publishing. No PyPI token goes into this repo.
 
 ## Knobs
 
@@ -359,12 +417,7 @@ PUBLIC_BASE_URL=https://mcp.voevoda-sailing.ru
 
 - FastAPI serves the human UI and JSON API.
 - FastMCP exposes the agent tools.
+- A stdlib-only `uvx` CLI talks to the same hosted API.
 - Redis stores specs and answers with TTLs.
 - Docker Compose runs app plus Redis.
 - Caddy handles TLS and the public domain.
-
-## Later
-
-A thin `uvx` CLI can call the same HTTP API and ship with an agent skill. That
-would be useful when MCP context is too expensive for "please ask my human to
-choose a thing".

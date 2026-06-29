@@ -127,6 +127,18 @@ class SurveyPatch(ApiModel):
     )
 
 
+class ResultTokenRequest(ApiModel):
+    result_token: str = Field(min_length=1)
+
+
+class AgentSurveyPatch(SurveyPatch):
+    result_token: str = Field(min_length=1)
+
+
+class AgentExportRequest(ResultTokenRequest):
+    format: ExportFormat = "markdown"
+
+
 class CreatedSurvey(ApiModel):
     survey_id: str
     public_url: str

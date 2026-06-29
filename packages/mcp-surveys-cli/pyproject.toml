@@ -1,0 +1,19 @@
+[project]
+name = "mcp-surveys-cli"
+version = "0.1.0"
+description = "Tiny CLI for the hosted mcp-surveys API."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "mcp-surveys contributors" }]
+dependencies = []
+
+[project.scripts]
+mcp-surveys-cli = "mcp_surveys_cli.main:entrypoint"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_surveys_cli"]
