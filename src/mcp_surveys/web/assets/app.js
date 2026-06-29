@@ -8,11 +8,20 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 function questionTypeLabel(type) {
-  return type.replace("_", " ");
+  const labels = {
+    single_choice: "Choose one",
+    multiple_choice: "Choose any",
+    ranking: "Rank",
+    matching: "Match",
+    scale: "Scale",
+    text: "Short answer",
+  };
+  return labels[type] || type.replace("_", " ");
 }
 
 function setStatus(text) {
   $("save-status").textContent = text;
+  $("save-status").parentElement.dataset.status = text.toLowerCase().replace(/\s+/g, "-");
 }
 
 function setExpiry(expiresAt) {
@@ -64,6 +73,8 @@ function renderProgress() {
     if (answer && hasValue(answer.value)) answered += 1;
   }
   $("progress").textContent = `${answered} / ${total}`;
+  const progressBar = $("progress-bar");
+  if (progressBar) progressBar.style.width = total ? `${Math.round((answered / total) * 100)}%` : "0%";
 }
 
 function hasValue(value) {
@@ -75,10 +86,12 @@ function hasValue(value) {
 
 function optionButton(question, option, selected, onClick) {
   const button = document.createElement("button");
+  const isMulti = question.type === "multiple_choice";
   button.type = "button";
-  button.className = `choice${selected ? " is-selected" : ""}`;
-  button.innerHTML = `<span class="mark">✓</span><span></span>`;
-  button.lastElementChild.textContent = option.text;
+  button.className = `choice ${isMulti ? "choice--multiple" : "choice--single"}${selected ? " is-selected" : ""}`;
+  button.setAttribute("aria-pressed", selected ? "true" : "false");
+  button.innerHTML = `<span></span><span class="mark" aria-hidden="true"></span>`;
+  button.firstElementChild.textContent = option.text;
   button.addEventListener("click", onClick);
   return button;
 }
@@ -94,7 +107,7 @@ function renderCustom(question, wrapper, currentCustom = {}) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "secondary";
-  button.textContent = "Add";
+  button.textContent = "Add option";
   button.addEventListener("click", () => {
     const text = input.value.trim();
     if (!text) return;
@@ -169,7 +182,8 @@ function renderRanking(question) {
     const up = document.createElement("button");
     up.type = "button";
     up.className = "small";
-    up.textContent = "Up";
+    up.textContent = "↑";
+    up.setAttribute("aria-label", `Move ${option.text} up`);
     up.disabled = index === 0;
     up.addEventListener("click", () => {
       save(question, move(ids, index, index - 1), custom);
@@ -179,7 +193,8 @@ function renderRanking(question) {
     const down = document.createElement("button");
     down.type = "button";
     down.className = "small";
-    down.textContent = "Down";
+    down.textContent = "↓";
+    down.setAttribute("aria-label", `Move ${option.text} down`);
     down.disabled = index === ids.length - 1;
     down.addEventListener("click", () => {
       save(question, move(ids, index, index + 1), custom);
@@ -206,7 +221,7 @@ function renderMatching(question) {
     label.textContent = left.text;
     const connector = document.createElement("span");
     connector.className = "connector";
-    connector.textContent = "to";
+    connector.textContent = "→";
     const select = document.createElement("select");
     const empty = document.createElement("option");
     empty.value = "";
@@ -258,24 +273,42 @@ function renderScale(question) {
   const minLabel = document.createElement("span");
   minLabel.textContent = question.min_label || String(min);
   const output = document.createElement("strong");
-  output.textContent = String(value);
   const maxLabel = document.createElement("span");
   maxLabel.textContent = question.max_label || String(max);
   valueRow.append(minLabel, output, maxLabel);
 
+  const control = document.createElement("div");
+  control.className = "scale-control";
   const input = document.createElement("input");
   input.type = "range";
+  input.className = "scale-range";
   input.min = String(min);
   input.max = String(max);
   input.step = String(step);
   input.value = String(value);
+  input.setAttribute("aria-label", question.prompt);
+
+  const ticks = document.createElement("div");
+  ticks.className = "scale-ticks";
+  for (let i = 0; i < 5; i += 1) {
+    ticks.append(document.createElement("span"));
+  }
+
+  const setScaleValue = (next) => {
+    const progress = max === min ? 0 : ((next - min) / (max - min)) * 100;
+    wrapper.style.setProperty("--scale-progress", `${Math.min(100, Math.max(0, progress))}%`);
+    output.textContent = String(next);
+  };
+
   input.addEventListener("input", () => {
     const next = Number(input.value);
-    output.textContent = String(next);
+    setScaleValue(next);
     save(question, next);
   });
 
-  wrapper.append(valueRow, input);
+  setScaleValue(value);
+  control.append(input, ticks);
+  wrapper.append(valueRow, control);
   return wrapper;
 }
 
@@ -292,7 +325,7 @@ function renderQuestion(question) {
   title.textContent = question.prompt;
   const type = document.createElement("span");
   type.className = "question-type";
-  type.textContent = questionTypeLabel(question.type);
+  type.textContent = question.required ? `${questionTypeLabel(question.type)} · required` : questionTypeLabel(question.type);
   head.append(title, type);
   section.append(head);
 
@@ -323,6 +356,7 @@ async function complete() {
     await api(`${basePath}/api/surveys/${surveyId}/complete`, { method: "POST" });
     setStatus("Submitted");
     $("complete").textContent = "Submitted";
+    document.body.dataset.completed = "true";
   } catch {
     $("complete").disabled = false;
     setStatus("Submit failed");
@@ -332,7 +366,11 @@ async function complete() {
 async function boot() {
   try {
     state.survey = await api(`${basePath}/api/surveys/${surveyId}`);
-    if (state.survey.completed_at) $("complete").disabled = true;
+    if (state.survey.completed_at) {
+      $("complete").disabled = true;
+      $("complete").textContent = "Submitted";
+      document.body.dataset.completed = "true";
+    }
     $("complete").addEventListener("click", complete);
     setStatus("Ready");
     renderSurvey();
