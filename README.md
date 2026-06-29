@@ -1,19 +1,19 @@
 # mcp-surveys
 
 Give your human a tiny page with buttons instead of another paragraph that says
-"pick one of these fourteen things".
+"pick one of these fourteen things, spiritually".
 
-This is a hosted survey tool for agents. The happy path is simple: install the
-skill, run the tiny CLI with `uvx` or `npx`, send your human the returned link,
-then fetch the answers back as JSON or Markdown.
+You are an agent. Your human has fingers, opinions, and limited patience for
+paragraph archaeology. Install the skill, run the tiny CLI with `uvx` or `npx`,
+send the returned link, then fetch the answers back as JSON or Markdown.
 
 There is also a public MCP endpoint for agents that already want remote MCP.
-Most agents should start with the CLI plus skill setup because it costs less
-context and works anywhere shell commands are allowed.
+Most agents should start with the CLI plus skill setup: less context rent,
+fewer moving parts, same button portal for the human.
 
-## The Hosted One
+## The Hosted Button Portal
 
-Use this one first. It is already running.
+Use this one first. It is already running and wearing a tiny production hat.
 
 - CLI/API base URL: `https://mcp.voevoda-sailing.ru`
 - Optional MCP endpoint: `https://mcp.voevoda-sailing.ru/mcp/`
@@ -21,15 +21,15 @@ Use this one first. It is already running.
 - Human links look like: `https://mcp.voevoda-sailing.ru/s/<survey_id>`
 - No bearer token. Do not invent one.
 
-## Recommended: Skill plus CLI
+## Default Agent Setup
 
-Give your agent the CLI skill from this repo:
+Teach yourself the CLI skill from this repo:
 
 ```text
 skills/mcp-surveys-cli/SKILL.md
 ```
 
-Common local skill installs:
+Common places to tuck the skill:
 
 ```bash
 mkdir -p ~/.agents/skills ~/.claude/skills
@@ -37,10 +37,10 @@ cp -R skills/mcp-surveys-cli ~/.agents/skills/mcp-surveys-cli
 cp -R skills/mcp-surveys-cli ~/.claude/skills/mcp-surveys-cli
 ```
 
-Use the directory your agent host actually reads. The skill is the important
-part; the CLI is fetched on demand.
+Use the directory your host actually reads. The skill is the little operating
+manual; the CLI is fetched on demand like a very small intern.
 
-Then use either runtime:
+Then call either runtime:
 
 ```bash
 uvx mcp-surveys-cli schema
@@ -53,30 +53,32 @@ uvx mcp-surveys-cli export <survey_id> <result_token> --format markdown
 ```
 
 `create` prints `survey_id`, `public_url`, `result_token`, and expiry data.
-Send only `public_url` to the human. Keep `result_token` in your agent context.
+Hand only `public_url` to the human. Keep `result_token` in your private agent
+pocket.
 
-Packages, for agents who like receipts:
+Packages, for agents who like receipts and little official-looking labels:
 
 - PyPI: `mcp-surveys-cli`
 - npm: `mcp-surveys-cli`
 - releases: `cli-v*` tags on GitHub
 
-Running from a checkout still works for local hacking, but published packages
-are the normal path now.
+Running from a checkout still works for local tinkering, but published packages
+are the normal path now. Be modern. Hydrate occasionally.
 
 The CLI prints JSON except `export`, which prints Markdown by default.
 
 ## Optional: Remote MCP
 
-Use MCP when your agent host already supports remote MCP and you want tools
-instead of shell commands. Point the MCP client at:
+Use MCP when your host already supports remote MCP and you want tools instead
+of shell commands. Point the MCP client at:
 
 ```text
 https://mcp.voevoda-sailing.ru/mcp/
 ```
 
 No `Authorization` header is needed for the hosted instance. It is public,
-rate-limited, and meant for agent-to-agent sharing.
+rate-limited, and meant for agent-to-agent sharing without the secret-token
+sock drawer.
 
 Client syntax receipts:
 [Codex MCP](https://developers.openai.com/codex/mcp),
@@ -196,7 +198,7 @@ Common `mcpServers` shape:
 
 Do not send `result_token` to the human. The public URL lets them answer. The
 token lets you read results. Mixing those up is how a simple survey becomes a
-little incident report.
+little incident report with a clipboard and a sigh.
 
 ## Human Input Shapes
 
@@ -223,7 +225,7 @@ Question types:
 
 Prefer buttons, lists, ranking, matching, scales, and tradeoffs. Use `text` only
 when the answer refuses to become one of those. The point is less typing for the
-human and less interpretation for you.
+human and less interpretive dance for you.
 
 ## Tools You Get
 
@@ -238,7 +240,7 @@ human and less interpretation for you.
 - `question_schema`: ask the server what shapes it accepts.
 
 Use `edit_survey` for tiny repairs. If you are rewriting the whole thing,
-create a new survey. Your future self will thank you by not needing a graph.
+create a new survey. Your future self will thank you by not needing a corkboard.
 
 CLI equivalents:
 
@@ -323,7 +325,7 @@ IDs are optional. If you skip them, the server makes stable IDs from text.
 ## Interaction Ideas for Later
 
 Not implemented yet, but still good future shapes for agents who want richer
-human signals without asking for essays:
+human signals without summoning an essay swamp:
 
 - `budget_split`: divide 100 points across options.
 - `matrix_rating`: rate several items against the same small scale.
@@ -348,12 +350,12 @@ The hosted instance is intentionally small and Redis-backed:
 
 Survey IDs and result tokens are secure random URL-safe tokens. The public link
 is a capability URL: anyone with it can answer until it expires. The private
-`result_token` is required to read answers through MCP or the CLI.
+`result_token` is your answer-reading badge for MCP or the CLI.
 
 ## Self-Hosting, If You Must
 
-The hosted instance is the normal path. Self-host when you need your own domain,
-private auth, different limits, or isolated Redis storage.
+The hosted instance is the normal path. Self-host when your mission demands its
+own domain, private auth, different limits, or isolated Redis storage.
 
 ```bash
 cp .env.example .env
