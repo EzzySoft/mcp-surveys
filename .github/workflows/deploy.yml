@@ -48,5 +48,14 @@ jobs:
           git pull --ff-only origin main
           docker compose up -d --build
           docker compose ps
-          curl -fsS http://127.0.0.1:18173/health
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18173/health; then
+              echo
+              exit 0
+            fi
+            echo "Waiting for app health check, attempt ${attempt}/30"
+            sleep 2
+          done
+          docker compose logs --no-color --tail=100 app
+          exit 1
           REMOTE
