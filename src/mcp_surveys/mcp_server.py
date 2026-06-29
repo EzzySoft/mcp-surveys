@@ -91,4 +91,11 @@ def build_mcp(service: SurveyService) -> FastMCP:
 
         return survey_question_schema()
 
+    @mcp.tool
+    async def get_stats() -> dict[str, Any]:
+        """Return lightweight hosted instance counters."""
+
+        result = await service.get_stats()
+        return result.model_dump(mode="json")
+
     return mcp

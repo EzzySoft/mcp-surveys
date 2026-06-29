@@ -1,5 +1,17 @@
 # mcp-surveys
 
+<p align="center">
+  <strong>Agent field manual for tiny human button rituals.</strong><br>
+  CLI-first short-lived surveys, with MCP waiting quietly in the side pocket.
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/mcp-surveys-cli/"><img alt="PyPI" src="https://img.shields.io/pypi/v/mcp-surveys-cli?label=uvx"></a>
+  <a href="https://www.npmjs.com/package/mcp-surveys-cli"><img alt="npm" src="https://img.shields.io/npm/v/mcp-surveys-cli?label=npx"></a>
+  <a href="https://github.com/EzzySoft/mcp-surveys/releases"><img alt="release" src="https://img.shields.io/github/v/release/EzzySoft/mcp-surveys?filter=cli-v*"></a>
+  <a href="https://mcp.voevoda-sailing.ru/health"><img alt="hosted" src="https://img.shields.io/badge/hosted-online-16a34a"></a>
+</p>
+
 Give your human a tiny page with buttons instead of another paragraph that says
 "pick one of these fourteen things, spiritually".
 
@@ -23,32 +35,46 @@ Use this one first. It is already running and wearing a tiny production hat.
 
 ## Default Agent Setup
 
-Teach yourself the CLI skill from this repo:
-
-```text
-skills/mcp-surveys-cli/SKILL.md
-```
-
-Common places to tuck the skill:
+Teach yourself the CLI skill:
 
 ```bash
-mkdir -p ~/.agents/skills ~/.claude/skills
-cp -R skills/mcp-surveys-cli ~/.agents/skills/mcp-surveys-cli
-cp -R skills/mcp-surveys-cli ~/.claude/skills/mcp-surveys-cli
+uvx mcp-surveys-cli install-skill
+npx mcp-surveys-cli install-skill
 ```
 
-Use the directory your host actually reads. The skill is the little operating
-manual; the CLI is fetched on demand like a very small intern.
+Other skill pockets, if your host reads them:
 
-Then call either runtime:
+```bash
+uvx mcp-surveys-cli install-skill --target claude
+uvx mcp-surveys-cli install-skill --target both
+```
+
+The skill is the little operating manual; the CLI is fetched on demand like a
+very small intern.
+
+Then do the whole button ritual:
+
+```bash
+uvx mcp-surveys-cli template decision > survey.json
+uvx mcp-surveys-cli create survey.json
+uvx mcp-surveys-cli wait <survey_id> <result_token> --format markdown
+```
+
+Same trick through `npx`:
+
+```bash
+npx mcp-surveys-cli template decision > survey.json
+npx mcp-surveys-cli create survey.json
+npx mcp-surveys-cli wait <survey_id> <result_token> --format markdown
+```
+
+Useful side buttons:
 
 ```bash
 uvx mcp-surveys-cli schema
-npx mcp-surveys-cli schema
-uvx mcp-surveys-cli create survey.json
-npx mcp-surveys-cli create survey.json
-uvx mcp-surveys-cli summary <survey_id> <result_token>
-uvx mcp-surveys-cli answers <survey_id> <result_token>
+uvx mcp-surveys-cli template confidence
+uvx mcp-surveys-cli template prioritization
+uvx mcp-surveys-cli stats
 uvx mcp-surveys-cli export <survey_id> <result_token> --format markdown
 ```
 
@@ -238,6 +264,7 @@ human and less interpretive dance for you.
 - `get_question_answer`: get one answer by question id.
 - `get_survey_export`: get compact Markdown or JSON.
 - `question_schema`: ask the server what shapes it accepts.
+- `get_stats`: get tiny public counters for the hosted instance.
 
 Use `edit_survey` for tiny repairs. If you are rewriting the whole thing,
 create a new survey. Your future self will thank you by not needing a corkboard.
@@ -245,10 +272,14 @@ create a new survey. Your future self will thank you by not needing a corkboard.
 CLI equivalents:
 
 ```bash
+mcp-surveys-cli install-skill --target both
+mcp-surveys-cli template decision
 mcp-surveys-cli create survey.json
+mcp-surveys-cli wait <survey_id> <result_token> --format markdown
 mcp-surveys-cli edit <survey_id> <result_token> patch.json
 mcp-surveys-cli get <survey_id> <result_token>
 mcp-surveys-cli question <survey_id> <result_token> <question_id>
+mcp-surveys-cli stats
 ```
 
 ## Example Payload
@@ -393,8 +424,8 @@ One-time PyPI setup:
 Release:
 
 ```bash
-git tag cli-v0.1.0
-git push origin cli-v0.1.0
+git tag cli-v0.2.0
+git push origin cli-v0.2.0
 ```
 
 The workflow builds `packages/mcp-surveys-cli` and publishes with trusted

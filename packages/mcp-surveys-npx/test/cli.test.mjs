@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { run } from "../bin/mcp-surveys-cli.js";
@@ -34,4 +37,56 @@ test("request errors are printed", async () => {
 
   assert.equal(code, 1);
   assert.match(err.join(""), /invalid result token/);
+});
+
+test("template prints a payload", async () => {
+  const out = [];
+  const code = await run(["template", "decision"], {
+    write: (value) => out.push(value),
+    error: () => {},
+  });
+
+  assert.equal(code, 0);
+  assert.equal(JSON.parse(out.join("")).title, "Decision capture");
+});
+
+test("wait exports once completed", async () => {
+  const calls = [];
+  const out = [];
+  const code = await run(["--base-url", "https://survey.test", "wait", "s1", "tok", "--format", "markdown"], {
+    write: (value) => out.push(value),
+    error: () => {},
+    request: async (method, url, body, raw) => {
+      calls.push([method, url, body, raw]);
+      return url.endsWith("/summary") ? { status: "completed" } : "# Done\n";
+    },
+  });
+
+  assert.equal(code, 0);
+  assert.equal(out.join(""), "# Done\n");
+  assert.deepEqual(calls.at(-1), [
+    "POST",
+    "https://survey.test/api/agent/surveys/s1/export",
+    { result_token: "tok", format: "markdown" },
+    true,
+  ]);
+});
+
+test("install-skill writes the skill", async () => {
+  const home = await mkdtemp(join(tmpdir(), "mcp-surveys-cli-"));
+  try {
+    const out = [];
+    const code = await run(["install-skill", "--target", "agents"], {
+      home,
+      write: (value) => out.push(value),
+      error: () => {},
+    });
+    const installed = JSON.parse(out.join("")).installed[0];
+
+    assert.equal(code, 0);
+    assert.equal(installed, join(home, ".agents", "skills", "mcp-surveys-cli", "SKILL.md"));
+    assert.match(await readFile(installed, "utf8"), /uvx mcp-surveys-cli template decision/);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });

@@ -13,9 +13,9 @@ Default hosted instance:
 ```bash
 uvx mcp-surveys-cli schema
 npx mcp-surveys-cli schema
+uvx mcp-surveys-cli template decision > survey.json
 uvx mcp-surveys-cli create survey.json
-npx mcp-surveys-cli create survey.json
-uvx mcp-surveys-cli summary <survey_id> <result_token>
+uvx mcp-surveys-cli wait <survey_id> <result_token> --format markdown
 uvx mcp-surveys-cli answers <survey_id> <result_token>
 ```
 

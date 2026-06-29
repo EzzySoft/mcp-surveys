@@ -6,7 +6,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from mcp_surveys.errors import SurveyForbidden, SurveyLocked, SurveyValidationError
+from mcp_surveys.errors import RateLimitExceeded, SurveyForbidden, SurveyLocked, SurveyValidationError
 from mcp_surveys.limits import MAX_CUSTOM_OPTIONS, MAX_TEXT_ANSWER_CHARS
 from mcp_surveys.models import (
     AnswerIn,
@@ -22,6 +22,7 @@ from mcp_surveys.models import (
     SurveyAnswers,
     SurveyPatch,
     SurveyResponse,
+    SurveyStats,
     SurveySummary,
 )
 from mcp_surveys.storage import SurveyStore
@@ -102,7 +103,11 @@ class SurveyService:
         if len(request.model_dump_json().encode("utf-8")) > self.max_create_survey_bytes:
             raise SurveyValidationError(f"create_survey payload is larger than {self.max_create_survey_bytes} bytes")
         if self.rate_limiter is not None:
-            await self.rate_limiter.check_create_survey(client_key)
+            try:
+                await self.rate_limiter.check_create_survey(client_key)
+            except RateLimitExceeded:
+                await self.store.increment_stat("rate_limit_hits")
+                raise
         created_at = now_utc()
         survey = Survey(
             id=_token(),
@@ -115,6 +120,7 @@ class SurveyService:
             expires_at=created_at + timedelta(seconds=self.link_ttl_seconds),
         )
         await self.store.save(survey, self.link_ttl_seconds)
+        await self.store.increment_stat("created")
         return CreatedSurvey(
             survey_id=survey.id,
             public_url=f"{self.public_base_url}/s/{survey.id}",
@@ -140,6 +146,7 @@ class SurveyService:
         )
         survey.interactions += 1
         await self.store.save(survey, self._ttl_for(survey))
+        await self.store.increment_stat("answers_saved")
         return self._public_survey(survey)
 
     async def complete_survey(self, survey_id: str) -> SurveySummary:
@@ -149,6 +156,7 @@ class SurveyService:
             survey.response.completed_at = completed_at
             survey.expires_at = completed_at + timedelta(seconds=self.completed_ttl_seconds)
             await self.store.save(survey, self.completed_ttl_seconds)
+            await self.store.increment_stat("completed")
         return self._summary(survey)
 
     async def edit_survey(self, survey_id: str, result_token: str, patch: SurveyPatch) -> PublicSurvey:
@@ -195,6 +203,9 @@ class SurveyService:
             lines.append(self._markdown_answer(answer.answer) if answer.answered else "_Unanswered_")
             lines.append("")
         return "\n".join(lines).strip() + "\n"
+
+    async def get_stats(self) -> SurveyStats:
+        return await self.store.get_stats()
 
     async def _get_for_agent(self, survey_id: str, result_token: str) -> Survey:
         survey = await self.store.get(survey_id)

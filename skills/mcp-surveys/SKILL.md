@@ -27,6 +27,7 @@ Do not create a survey for one simple yes/no question unless the user experience
 4. After the human says they are done, call `get_survey_summary`.
 5. If completion is partial, decide whether to ask them to finish or use the available answers.
 6. Call `get_survey_answers`, `get_question_answer`, or `get_survey_export` as needed.
+7. Use `get_stats` only when checking tiny hosted-instance counters.
 
 ## Editing
 

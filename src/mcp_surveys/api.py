@@ -53,6 +53,10 @@ def api_router(service: SurveyService) -> APIRouter:
     async def get_question_schema():
         return question_schema()
 
+    @router.get("/agent/stats")
+    async def get_agent_stats():
+        return await service.get_stats()
+
     @router.get("/surveys/{survey_id}")
     async def get_survey(survey_id: str):
         return await service.get_public_survey(survey_id)

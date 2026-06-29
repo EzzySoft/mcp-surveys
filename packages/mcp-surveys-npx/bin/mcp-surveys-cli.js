@@ -1,10 +1,102 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_BASE_URL = "https://mcp.voevoda-sailing.ru";
+const SKILL_NAME = "mcp-surveys-cli";
+const SKILL_TEXT = `---
+name: mcp-surveys-cli
+description: Use when an agent can run shell commands and needs short-lived human surveys through uvx or npx.
+---
+
+# mcp-surveys-cli
+
+Use the CLI plus this skill as the default setup. It avoids remote MCP setup,
+keeps context small, and works in any agent host that can run \`uvx\` or \`npx\`.
+
+Default hosted instance:
+
+\`\`\`bash
+uvx mcp-surveys-cli schema
+npx mcp-surveys-cli schema
+uvx mcp-surveys-cli template decision > survey.json
+uvx mcp-surveys-cli create survey.json
+uvx mcp-surveys-cli wait <survey_id> <result_token> --format markdown
+uvx mcp-surveys-cli answers <survey_id> <result_token>
+\`\`\`
+
+\`create\` prints \`survey_id\`, \`public_url\`, \`result_token\`, and expiry data. Send only \`public_url\` to the human. Keep \`result_token\` private.
+
+Use \`MCP_SURVEYS_BASE_URL\` or \`--base-url\` for another instance.
+
+Prefer structured buttons, ranking, matching, scale, and \`binary_tradeoff\`; use \`text\` only when the answer cannot fit those shapes.
+`;
+const TEMPLATES = {
+  decision: {
+    title: "Decision capture",
+    description: "Quick button ritual. Link expires in one hour.",
+    questions: [
+      {
+        id: "choice",
+        type: "single_choice",
+        prompt: "Which option should we choose?",
+        required: true,
+        allow_custom: true,
+        options: [{ id: "a", text: "Option A" }, { id: "b", text: "Option B" }],
+      },
+      {
+        id: "confidence",
+        type: "scale",
+        prompt: "How confident are you?",
+        required: true,
+        min: 0,
+        max: 100,
+        step: 5,
+        min_label: "Guess",
+        max_label: "Certain",
+      },
+    ],
+  },
+  confidence: {
+    title: "Confidence check",
+    description: "Collect confidence without summoning a paragraph.",
+    questions: [
+      {
+        id: "confidence",
+        type: "scale",
+        prompt: "How confident are you?",
+        required: true,
+        min: 0,
+        max: 100,
+        step: 5,
+        min_label: "Guess",
+        max_label: "Certain",
+      },
+    ],
+  },
+  prioritization: {
+    title: "Priority stack",
+    description: "Make the human sort the tiny pile.",
+    questions: [
+      {
+        id: "priorities",
+        type: "ranking",
+        prompt: "Rank these by priority.",
+        required: true,
+        allow_custom: true,
+        options: [
+          { id: "speed", text: "Move fast" },
+          { id: "risk", text: "Reduce risk" },
+          { id: "quality", text: "Improve quality" },
+        ],
+      },
+    ],
+  },
+};
 
 function usage() {
   return `Usage: mcp-surveys-cli [--base-url URL] <command>
@@ -17,6 +109,10 @@ Commands:
   answers <survey_id> <result_token>
   question <survey_id> <result_token> <question_id>
   export <survey_id> <result_token> [--format markdown|json]
+  wait <survey_id> <result_token> [--timeout seconds] [--interval seconds] [--format markdown|json]
+  template <decision|confidence|prioritization>
+  install-skill [--target agents|claude|both] [--force]
+  stats
   schema`;
 }
 
@@ -64,10 +160,71 @@ function writeJson(write, value) {
   write(`${JSON.stringify(value)}\n`);
 }
 
+function option(args, name, fallback) {
+  const index = args.indexOf(name);
+  return index === -1 ? fallback : args[index + 1];
+}
+
+function withoutOptions(args, names) {
+  const cleaned = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (names.includes(args[index])) index += 1;
+    else if (args[index] !== "--force") cleaned.push(args[index]);
+  }
+  return cleaned;
+}
+
+async function installSkill(args, home) {
+  const target = option(args, "--target", "agents");
+  const force = args.includes("--force");
+  const homes = {
+    agents: join(home, ".agents", "skills", SKILL_NAME),
+    claude: join(home, ".claude", "skills", SKILL_NAME),
+  };
+  const selected = target === "both" ? [homes.agents, homes.claude] : [homes[target]];
+  if (!selected[0]) throw new Error("unknown target; use agents, claude, or both");
+  const installed = [];
+  for (const directory of selected) {
+    const path = join(directory, "SKILL.md");
+    let current = null;
+    try {
+      current = await readFile(path, "utf8");
+    } catch {}
+    if (current !== null && current !== SKILL_TEXT && !force) {
+      throw new Error(`${path} already exists; use --force to replace it`);
+    }
+    await mkdir(directory, { recursive: true });
+    await writeFile(path, SKILL_TEXT, "utf8");
+    installed.push(path);
+  }
+  return { installed };
+}
+
+async function waitForCompletion(baseUrl, args, request, sleep) {
+  const cleaned = withoutOptions(args, ["--timeout", "--interval", "--format"]);
+  const [surveyId, resultToken] = cleaned;
+  const timeout = Number(option(args, "--timeout", "3600"));
+  const interval = Number(option(args, "--interval", "5"));
+  const format = option(args, "--format", "markdown");
+  const deadline = Date.now() + timeout * 1000;
+  let summary = null;
+  while (true) {
+    summary = await request("POST", endpoint(baseUrl, `/api/agent/surveys/${surveyId}/summary`), { result_token: resultToken });
+    if (summary.status === "completed") {
+      return request("POST", endpoint(baseUrl, `/api/agent/surveys/${surveyId}/export`), { result_token: resultToken, format }, true);
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error(`timed out waiting for completion: ${JSON.stringify(summary)}`);
+    await sleep(Math.min(Math.max(interval, 0.1) * 1000, remaining));
+  }
+}
+
 export async function run(argv, io = {}) {
   const write = io.write || ((value) => process.stdout.write(value));
   const error = io.error || ((value) => process.stderr.write(value));
   const request = io.request || httpRequest;
+  const sleep = io.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const home = io.home || homedir();
   const stdin = io.stdin ?? "";
   const { baseUrl, command, args } = parse(argv);
 
@@ -94,6 +251,15 @@ export async function run(argv, io = {}) {
       const formatIndex = args.indexOf("--format");
       const format = formatIndex === -1 ? "markdown" : args[formatIndex + 1];
       write(await request("POST", endpoint(baseUrl, `/api/agent/surveys/${args[0]}/export`), { result_token: args[1], format }, true));
+    } else if (command === "wait") {
+      write(await waitForCompletion(baseUrl, args, request, sleep));
+    } else if (command === "template") {
+      if (!TEMPLATES[args[0]]) throw new Error(`unknown template: ${args[0]}`);
+      writeJson(write, TEMPLATES[args[0]]);
+    } else if (command === "install-skill") {
+      writeJson(write, await installSkill(args, home));
+    } else if (command === "stats") {
+      writeJson(write, await request("GET", endpoint(baseUrl, "/api/agent/stats")));
     } else if (command === "schema") {
       writeJson(write, await request("GET", endpoint(baseUrl, "/api/agent/question-schema")));
     } else {

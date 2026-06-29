@@ -10,12 +10,21 @@ from mcp_surveys.service import SurveyService
 class MemoryStore:
     def __init__(self) -> None:
         self.items = {}
+        self.stats = {}
 
     async def get(self, survey_id):
         return self.items[survey_id]
 
     async def save(self, survey, ttl_seconds):
         self.items[survey.id] = survey
+
+    async def increment_stat(self, name):
+        self.stats[name] = self.stats.get(name, 0) + 1
+
+    async def get_stats(self):
+        from mcp_surveys.models import SurveyStats
+
+        return SurveyStats(**self.stats)
 
     async def close(self):
         pass
@@ -53,3 +62,8 @@ def test_agent_api_create_and_read_answers():
     ).json()
 
     assert answers["answers"][0]["answer"] == {"id": "ramen", "text": "Ramen"}
+
+    stats = client.get("/api/agent/stats").json()
+
+    assert stats["created"] == 1
+    assert stats["answers_saved"] == 1

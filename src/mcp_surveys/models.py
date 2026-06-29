@@ -192,3 +192,10 @@ class SurveyAnswers(ApiModel):
     title: str
     summary: SurveySummary
     answers: list[QuestionAnswer]
+
+
+class SurveyStats(ApiModel):
+    created: int = 0
+    completed: int = 0
+    answers_saved: int = 0
+    rate_limit_hits: int = 0

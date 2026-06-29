@@ -12,6 +12,7 @@ class MemoryStore:
     def __init__(self) -> None:
         self.items = {}
         self.ttls = {}
+        self.stats = {}
 
     async def get(self, survey_id):
         return self.items[survey_id]
@@ -19,6 +20,14 @@ class MemoryStore:
     async def save(self, survey, ttl_seconds):
         self.items[survey.id] = survey
         self.ttls[survey.id] = ttl_seconds
+
+    async def increment_stat(self, name):
+        self.stats[name] = self.stats.get(name, 0) + 1
+
+    async def get_stats(self):
+        from mcp_surveys.models import SurveyStats
+
+        return SurveyStats(**self.stats)
 
     async def close(self):
         pass
@@ -50,7 +59,8 @@ def make_request():
 
 @pytest.mark.asyncio
 async def test_create_save_complete_and_read_answers():
-    service = SurveyService(MemoryStore(), "https://survey.test", 3600, 10800)
+    store = MemoryStore()
+    service = SurveyService(store, "https://survey.test", 3600, 10800)
     created = await service.create_survey(make_request(), client_key="127.0.0.1")
     survey = await service.get_public_survey(created.survey_id)
     question = survey.questions[0]
@@ -65,6 +75,10 @@ async def test_create_save_complete_and_read_answers():
     assert summary.status == "completed"
     assert summary.answered_count == 1
     assert answers.answers[0].answer == {"id": question.options[0].id, "text": "Ramen"}
+    stats = await service.get_stats()
+    assert stats.created == 1
+    assert stats.answers_saved == 1
+    assert stats.completed == 1
 
 
 @pytest.mark.asyncio
@@ -140,12 +154,14 @@ def test_binary_tradeoff_custom_theme_requires_colors():
 
 @pytest.mark.asyncio
 async def test_rate_limit_blocks_create():
-    service = SurveyService(MemoryStore(), "https://survey.test", 3600, 10800, rate_limiter=CountingLimiter(1))
+    store = MemoryStore()
+    service = SurveyService(store, "https://survey.test", 3600, 10800, rate_limiter=CountingLimiter(1))
 
     await service.create_survey(make_request(), client_key="127.0.0.1")
 
     with pytest.raises(RateLimitExceeded):
         await service.create_survey(make_request(), client_key="127.0.0.1")
+    assert (await service.get_stats()).rate_limit_hits == 1
 
 
 @pytest.mark.asyncio
