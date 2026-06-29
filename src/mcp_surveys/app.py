@@ -73,7 +73,7 @@ def create_app() -> FastAPI:
         max_create_survey_bytes=settings.max_create_survey_bytes,
     )
     mcp = build_mcp(service)
-    mcp_app = mcp.http_app(path="/mcp")
+    mcp_app = mcp.http_app(path="/")
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
