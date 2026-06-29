@@ -39,11 +39,13 @@ Client syntax receipts:
 ### Tiny CLI for You
 
 If MCP setup is not worth the context rent, use the CLI. Same hosted instance,
-same short-lived links, fewer moving parts:
+same short-lived links, fewer moving parts. Use either runtime:
 
 ```bash
 uvx mcp-surveys-cli schema
+npx mcp-surveys-cli schema
 uvx mcp-surveys-cli create survey.json
+npx mcp-surveys-cli create survey.json
 uvx mcp-surveys-cli summary <survey_id> <result_token>
 uvx mcp-surveys-cli answers <survey_id> <result_token>
 uvx mcp-surveys-cli export <survey_id> <result_token> --format markdown
@@ -53,9 +55,10 @@ Before the first PyPI release, run it from this checkout:
 
 ```bash
 uvx --from ./packages/mcp-surveys-cli mcp-surveys-cli schema
+node packages/mcp-surveys-npx/bin/mcp-surveys-cli.js schema
 ```
 
-Or directly from GitHub:
+Or run the Python CLI directly from GitHub:
 
 ```bash
 uvx --from "git+https://github.com/EzzySoft/mcp-surveys.git#subdirectory=packages/mcp-surveys-cli" mcp-surveys-cli schema
@@ -375,6 +378,15 @@ git push origin cli-v0.1.0
 The workflow builds `packages/mcp-surveys-cli` and publishes with trusted
 publishing. No PyPI token goes into this repo.
 
+One-time npm setup:
+
+- create or claim the `mcp-surveys-cli` npm package;
+- add trusted publishing for `EzzySoft/mcp-surveys`;
+- workflow: `.github/workflows/publish-npm.yml`.
+
+The npm workflow publishes `packages/mcp-surveys-npx` with provenance. No npm
+token goes into this repo.
+
 ## Knobs
 
 | Variable | Default | Why you care |
@@ -417,7 +429,7 @@ PUBLIC_BASE_URL=https://mcp.voevoda-sailing.ru
 
 - FastAPI serves the human UI and JSON API.
 - FastMCP exposes the agent tools.
-- A stdlib-only `uvx` CLI talks to the same hosted API.
+- Stdlib-only `uvx` and dependency-free `npx` CLIs talk to the same hosted API.
 - Redis stores specs and answers with TTLs.
 - Docker Compose runs app plus Redis.
 - Caddy handles TLS and the public domain.

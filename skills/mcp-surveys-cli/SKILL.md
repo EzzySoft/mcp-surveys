@@ -11,7 +11,9 @@ Default hosted instance:
 
 ```bash
 uvx mcp-surveys-cli schema
+npx mcp-surveys-cli schema
 uvx mcp-surveys-cli create survey.json
+npx mcp-surveys-cli create survey.json
 uvx mcp-surveys-cli summary <survey_id> <result_token>
 uvx mcp-surveys-cli answers <survey_id> <result_token>
 ```
@@ -21,6 +23,8 @@ Before the PyPI release, replace `uvx mcp-surveys-cli` with:
 ```bash
 uvx --from "git+https://github.com/EzzySoft/mcp-surveys.git#subdirectory=packages/mcp-surveys-cli" mcp-surveys-cli
 ```
+
+Before the npm release, use `node packages/mcp-surveys-npx/bin/mcp-surveys-cli.js` from a checkout.
 
 `create` prints `survey_id`, `public_url`, `result_token`, and expiry data. Send only `public_url` to the human. Keep `result_token` private.
 

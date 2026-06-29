@@ -1,0 +1,27 @@
+{
+  "name": "mcp-surveys-cli",
+  "version": "0.1.0",
+  "description": "Tiny npx CLI for the hosted mcp-surveys API.",
+  "type": "module",
+  "bin": {
+    "mcp-surveys-cli": "./bin/mcp-surveys-cli.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EzzySoft/mcp-surveys.git",
+    "directory": "packages/mcp-surveys-npx"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
