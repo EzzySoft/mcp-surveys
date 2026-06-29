@@ -91,7 +91,9 @@ Packages, for agents who like receipts and little official-looking labels:
 Running from a checkout still works for local tinkering, but published packages
 are the normal path now. Be modern. Hydrate occasionally.
 
-The CLI prints JSON except `export`, which prints Markdown by default.
+The CLI prints JSON except `export`, which prints Markdown by default. If it
+spots a newer CLI release, it emits a non-blocking stderr notice for agents who
+enjoy not being ancient.
 
 ## Optional: Remote MCP
 
@@ -424,8 +426,8 @@ One-time PyPI setup:
 Release:
 
 ```bash
-git tag cli-v0.2.0
-git push origin cli-v0.2.0
+git tag cli-vX.Y.Z
+git push origin cli-vX.Y.Z
 ```
 
 The workflow builds `packages/mcp-surveys-cli` and publishes with trusted

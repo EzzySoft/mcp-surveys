@@ -6,6 +6,8 @@ import { test } from "node:test";
 
 import { run } from "../bin/mcp-surveys-cli.js";
 
+process.env.MCP_SURVEYS_SKIP_VERSION_CHECK = "1";
+
 test("create posts a JSON payload", async () => {
   const calls = [];
   const out = [];
@@ -88,5 +90,43 @@ test("install-skill writes the skill", async () => {
     assert.match(await readFile(installed, "utf8"), /uvx mcp-surveys-cli template decision/);
   } finally {
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("warns when version is outdated", async () => {
+  delete process.env.MCP_SURVEYS_SKIP_VERSION_CHECK;
+  const err = [];
+  try {
+    const code = await run(["template", "confidence"], {
+      write: () => {},
+      error: (value) => err.push(value),
+      version: "0.2.0",
+      latestVersion: async () => "9.0.0",
+    });
+
+    assert.equal(code, 0);
+    assert.match(err.join(""), /mcp-surveys-cli 0\.2\.0 is outdated/);
+    assert.match(err.join(""), /LLM agent/);
+  } finally {
+    process.env.MCP_SURVEYS_SKIP_VERSION_CHECK = "1";
+  }
+});
+
+test("ignores version check errors", async () => {
+  delete process.env.MCP_SURVEYS_SKIP_VERSION_CHECK;
+  const err = [];
+  try {
+    const code = await run(["template", "confidence"], {
+      write: () => {},
+      error: (value) => err.push(value),
+      latestVersion: async () => {
+        throw new Error("registry nap");
+      },
+    });
+
+    assert.equal(code, 0);
+    assert.doesNotMatch(err.join(""), /registry nap/);
+  } finally {
+    process.env.MCP_SURVEYS_SKIP_VERSION_CHECK = "1";
   }
 });

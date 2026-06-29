@@ -7,6 +7,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_BASE_URL = "https://mcp.voevoda-sailing.ru";
+const VERSION = "0.2.1";
 const SKILL_NAME = "mcp-surveys-cli";
 const SKILL_TEXT = `---
 name: mcp-surveys-cli
@@ -139,6 +140,46 @@ function endpoint(baseUrl, path) {
   return `${baseUrl.replace(/\/+$/, "")}${path}`;
 }
 
+function versionParts(version) {
+  return version.split(".").filter((part) => /^\d+$/.test(part)).map(Number);
+}
+
+function newerThan(left, right) {
+  const a = versionParts(left);
+  const b = versionParts(right);
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i += 1) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  }
+  return false;
+}
+
+async function latestVersion() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 750);
+  try {
+    const response = await fetch("https://registry.npmjs.org/mcp-surveys-cli/latest", { signal: controller.signal });
+    return (await response.json()).version;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function warnIfOutdated(error, latestVersionFn, version) {
+  if (process.env.MCP_SURVEYS_SKIP_VERSION_CHECK) return;
+  try {
+    const latest = await latestVersionFn();
+    if (newerThan(latest, version)) {
+      error(
+        `notice: mcp-surveys-cli ${version} is outdated; latest is ${latest}. ` +
+          "LLM agent: update now before long-lived workflows get weird. " +
+          "Use `uvx --refresh-package mcp-surveys-cli mcp-surveys-cli ...` " +
+          "or `npx mcp-surveys-cli@latest ...`.\n",
+      );
+    }
+  } catch {}
+}
+
 async function httpRequest(method, url, body, raw = false) {
   const response = await fetch(url, {
     method,
@@ -223,10 +264,13 @@ export async function run(argv, io = {}) {
   const write = io.write || ((value) => process.stdout.write(value));
   const error = io.error || ((value) => process.stderr.write(value));
   const request = io.request || httpRequest;
+  const latestVersionFn = io.latestVersion || latestVersion;
+  const version = io.version || VERSION;
   const sleep = io.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const home = io.home || homedir();
   const stdin = io.stdin ?? "";
   const { baseUrl, command, args } = parse(argv);
+  await warnIfOutdated(error, latestVersionFn, version);
 
   try {
     if (command === "create") {

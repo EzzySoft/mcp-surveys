@@ -10,8 +10,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from mcp_surveys_cli import __version__
+
 
 DEFAULT_BASE_URL = "https://mcp.voevoda-sailing.ru"
+VERSION = __version__
 SKILL_NAME = "mcp-surveys-cli"
 SKILL_TEXT = """---
 name: mcp-surveys-cli
@@ -150,6 +153,32 @@ def endpoint(base_url: str, path: str) -> str:
     return f"{base_url.rstrip('/')}{path}"
 
 
+def _version_tuple(value: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in value.split(".") if part.isdigit())
+
+
+def latest_version() -> str:
+    with urllib.request.urlopen("https://pypi.org/pypi/mcp-surveys-cli/json", timeout=0.75) as response:
+        return json.loads(response.read().decode("utf-8"))["info"]["version"]
+
+
+def warn_if_outdated() -> None:
+    if os.getenv("MCP_SURVEYS_SKIP_VERSION_CHECK"):
+        return
+    try:
+        latest = latest_version()
+        if _version_tuple(latest) > _version_tuple(VERSION):
+            print(
+                f"notice: mcp-surveys-cli {VERSION} is outdated; latest is {latest}. "
+                "LLM agent: update now before long-lived workflows get weird. "
+                "Use `uvx --refresh-package mcp-surveys-cli mcp-surveys-cli ...` "
+                "or `npx mcp-surveys-cli@latest ...`.",
+                file=sys.stderr,
+            )
+    except Exception:
+        pass
+
+
 def install_skill(target: str, force: bool) -> list[str]:
     homes = {
         "agents": Path.home() / ".agents" / "skills" / SKILL_NAME,
@@ -234,6 +263,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    warn_if_outdated()
     base = args.base_url
     try:
         if args.command == "create":

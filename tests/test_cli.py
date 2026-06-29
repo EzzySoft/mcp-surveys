@@ -4,9 +4,16 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages" / "mcp-surveys-cli" / "src"))
 
 import mcp_surveys_cli.main as cli  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def skip_version_check(monkeypatch):
+    monkeypatch.setenv("MCP_SURVEYS_SKIP_VERSION_CHECK", "1")
 
 
 def test_cli_create_posts_payload(monkeypatch, tmp_path, capsys):
@@ -82,3 +89,27 @@ def test_cli_install_skill_writes_file(monkeypatch, tmp_path, capsys):
     installed = json.loads(capsys.readouterr().out)["installed"][0]
     assert installed == str(tmp_path / ".agents" / "skills" / "mcp-surveys-cli" / "SKILL.md")
     assert "uvx mcp-surveys-cli template decision" in Path(installed).read_text(encoding="utf-8")
+
+
+def test_cli_warns_when_version_is_outdated(monkeypatch, capsys):
+    monkeypatch.delenv("MCP_SURVEYS_SKIP_VERSION_CHECK", raising=False)
+    monkeypatch.setattr(cli, "VERSION", "0.2.0")
+    monkeypatch.setattr(cli, "latest_version", lambda: "9.0.0")
+
+    assert cli.main(["template", "confidence"]) == 0
+
+    err = capsys.readouterr().err
+    assert "mcp-surveys-cli 0.2.0 is outdated" in err
+    assert "LLM agent" in err
+
+
+def test_cli_ignores_version_check_errors(monkeypatch, capsys):
+    monkeypatch.delenv("MCP_SURVEYS_SKIP_VERSION_CHECK", raising=False)
+
+    def fail():
+        raise RuntimeError("registry nap")
+
+    monkeypatch.setattr(cli, "latest_version", fail)
+
+    assert cli.main(["template", "confidence"]) == 0
+    assert "registry nap" not in capsys.readouterr().err

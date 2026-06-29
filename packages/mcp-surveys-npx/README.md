@@ -13,3 +13,4 @@ npx mcp-surveys-cli stats
 ```
 
 Use `MCP_SURVEYS_BASE_URL` or `--base-url` to point at another instance.
+Outdated-version notices go to stderr and never block the command.

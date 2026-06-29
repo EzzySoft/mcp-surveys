@@ -1,6 +1,6 @@
 {
   "name": "mcp-surveys-cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Tiny npx CLI for the hosted mcp-surveys API.",
   "type": "module",
   "bin": {
