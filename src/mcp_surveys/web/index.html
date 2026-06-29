@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Survey</title>
+    <link rel="stylesheet" href="../assets/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="topbar">
+        <div>
+          <p class="eyebrow">Temporary survey</p>
+          <h1 id="title">Loading</h1>
+          <p id="description" class="description"></p>
+        </div>
+        <div class="status-panel">
+          <span id="save-status">Opening</span>
+          <span id="expiry-status">Link expires soon</span>
+        </div>
+      </section>
+
+      <section id="questions" class="questions" aria-live="polite"></section>
+
+      <footer class="footer">
+        <div>
+          <strong id="progress">0 / 0</strong>
+          <span>answered</span>
+        </div>
+        <button id="complete" class="primary" type="button">Submit</button>
+      </footer>
+    </main>
+
+    <template id="empty-template">
+      <section class="empty">
+        <h2>This survey is no longer available</h2>
+        <p>The link may have expired. Ask the agent to create a fresh one.</p>
+      </section>
+    </template>
+
+    <script src="../assets/app.js" type="module"></script>
+  </body>
+</html>
