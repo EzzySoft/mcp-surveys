@@ -35,7 +35,7 @@ REDIS_URL=redis://localhost:6379/0 uv run mcp-surveys
 | --- | --- | --- |
 | `REDIS_URL` | `redis://redis:6379/0` | Redis connection string |
 | `PUBLIC_BASE_URL` | `https://mcp.voevoda-sailing.ru` | Base URL used in links returned to agents |
-| `MCP_AUTH_TOKEN` | empty | Optional bearer token required for `/mcp` |
+| `MCP_AUTH_TOKEN` | empty | Optional bearer token for private `/mcp` deployments |
 | `SURVEY_LINK_TTL_SECONDS` | `3600` | Active survey lifetime before completion |
 | `SURVEY_COMPLETED_TTL_SECONDS` | `10800` | Result lifetime after completion |
 | `REDIS_KEY_PREFIX` | `mcp-surveys` | Redis key prefix |
@@ -88,9 +88,10 @@ mcp.voevoda-sailing.ru {
 }
 ```
 
-Set `PUBLIC_BASE_URL=https://mcp.voevoda-sailing.ru` and set `MCP_AUTH_TOKEN`
-when the MCP endpoint is internet-facing. Point DNS for `mcp.voevoda-sailing.ru`
-to the server running Caddy before expecting TLS issuance to succeed.
+Set `PUBLIC_BASE_URL=https://mcp.voevoda-sailing.ru`. Leave
+`MCP_AUTH_TOKEN` empty for a public/shareable MCP server. Set it only when you
+want a private instance where every MCP client must send
+`Authorization: Bearer <token>`.
 
 ## Roadmap
 
