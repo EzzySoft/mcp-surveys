@@ -37,5 +37,5 @@ jobs:
 
       - name: Publish npm CLI
         if: steps.npm-version.outputs.exists != 'true'
-        run: npm publish --provenance --registry https://registry.npmjs.org/
+        run: npm publish --provenance --access public --registry https://registry.npmjs.org/
         working-directory: packages/mcp-surveys-npx

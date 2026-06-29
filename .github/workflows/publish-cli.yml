@@ -26,4 +26,4 @@ jobs:
         run: uv build packages/mcp-surveys-cli --out-dir dist/cli --no-sources
 
       - name: Publish CLI
-        run: uv publish --trusted-publishing always dist/cli/*
+        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/mcp-surveys-cli/ dist/cli/*
