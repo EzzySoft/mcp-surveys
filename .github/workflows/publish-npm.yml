@@ -24,6 +24,18 @@ jobs:
         run: npm test
         working-directory: packages/mcp-surveys-npx
 
+      - name: Check npm version
+        id: npm-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "mcp-surveys-cli@$VERSION" version --registry https://registry.npmjs.org/ >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        working-directory: packages/mcp-surveys-npx
+
       - name: Publish npm CLI
+        if: steps.npm-version.outputs.exists != 'true'
         run: npm publish --provenance --registry https://registry.npmjs.org/
         working-directory: packages/mcp-surveys-npx
