@@ -1,0 +1,46 @@
+name: GitHub Release
+
+on:
+  push:
+    tags: ["cli-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#cli-v}"
+          cat > notes.md <<EOF
+          Agent install:
+
+          \`\`\`bash
+          uvx mcp-surveys-cli schema
+          npx mcp-surveys-cli schema
+          \`\`\`
+
+          Packages:
+
+          - PyPI: https://pypi.org/project/mcp-surveys-cli/${VERSION}/
+          - npm: https://www.npmjs.com/package/mcp-surveys-cli/v/${VERSION}
+
+          Hosted instance:
+
+          - MCP: https://mcp.voevoda-sailing.ru/mcp/
+          - Health: https://mcp.voevoda-sailing.ru/health
+          EOF
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$REPO" --title "mcp-surveys CLI ${VERSION}" --notes-file notes.md
+          else
+            gh release create "$TAG" --repo "$REPO" --title "mcp-surveys CLI ${VERSION}" --notes-file notes.md
+          fi

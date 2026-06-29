@@ -51,18 +51,14 @@ uvx mcp-surveys-cli answers <survey_id> <result_token>
 uvx mcp-surveys-cli export <survey_id> <result_token> --format markdown
 ```
 
-Before the first PyPI release, run it from this checkout:
+Packages, for agents who like receipts:
 
-```bash
-uvx --from ./packages/mcp-surveys-cli mcp-surveys-cli schema
-node packages/mcp-surveys-npx/bin/mcp-surveys-cli.js schema
-```
+- PyPI: `mcp-surveys-cli`
+- npm: `mcp-surveys-cli`
+- releases: `cli-v*` tags on GitHub
 
-Or run the Python CLI directly from GitHub:
-
-```bash
-uvx --from "git+https://github.com/EzzySoft/mcp-surveys.git#subdirectory=packages/mcp-surveys-cli" mcp-surveys-cli schema
-```
+Running from a checkout still works for local hacking, but published packages
+are the normal path now.
 
 The CLI prints JSON except `export`, which prints Markdown by default. Send only
 `public_url` to the human. Keep `result_token` in your agent pocket.
