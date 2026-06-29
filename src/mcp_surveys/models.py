@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Literal
 
@@ -15,8 +16,9 @@ from mcp_surveys.limits import (
 )
 
 
-QuestionType = Literal["single_choice", "multiple_choice", "ranking", "matching", "scale", "text"]
+QuestionType = Literal["single_choice", "multiple_choice", "ranking", "matching", "scale", "binary_tradeoff", "text"]
 ExportFormat = Literal["json", "markdown"]
+_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 class ApiModel(BaseModel):
@@ -42,6 +44,9 @@ class Question(ApiModel):
     step: int | None = Field(default=None, gt=0)
     min_label: str | None = Field(default=None, max_length=MAX_OPTION_CHARS)
     max_label: str | None = Field(default=None, max_length=MAX_OPTION_CHARS)
+    theme: str | None = Field(default=None, max_length=24)
+    left_color: str | None = Field(default=None, max_length=7)
+    right_color: str | None = Field(default=None, max_length=7)
 
     @model_validator(mode="after")
     def validate_shape(self) -> "Question":
@@ -49,14 +54,33 @@ class Question(ApiModel):
             raise ValueError(f"{self.type} requires at least two options")
         if self.type == "matching" and (not self.left or not self.right):
             raise ValueError("matching requires left and right items")
+        if self.type == "binary_tradeoff" and (len(self.left) != 1 or len(self.right) != 1):
+            raise ValueError("binary_tradeoff requires exactly one left and one right thesis")
         if self.type in {"scale", "text"} and (self.options or self.left or self.right):
             raise ValueError(f"{self.type} questions cannot have options, left, or right")
+        if self.type == "binary_tradeoff" and self.options:
+            raise ValueError("binary_tradeoff questions cannot have options")
         if self.type == "scale":
             self.min = 0 if self.min is None else self.min
             self.max = 100 if self.max is None else self.max
             self.step = 1 if self.step is None else self.step
             if self.min >= self.max:
                 raise ValueError("scale min must be less than max")
+        if self.type == "binary_tradeoff":
+            self.min = -100 if self.min is None else self.min
+            self.max = 100 if self.max is None else self.max
+            self.step = 5 if self.step is None else self.step
+            self.theme = self.theme or "signal"
+            if self.min >= self.max:
+                raise ValueError("binary_tradeoff min must be less than max")
+            if self.theme not in {"signal", "mono", "calm", "custom"}:
+                raise ValueError("binary_tradeoff theme must be signal, mono, calm, or custom")
+            if self.theme == "custom" and (not self.left_color or not self.right_color):
+                raise ValueError("binary_tradeoff custom theme requires left_color and right_color")
+            if self.left_color and not _COLOR_RE.fullmatch(self.left_color):
+                raise ValueError("left_color must be a #RRGGBB hex color")
+            if self.right_color and not _COLOR_RE.fullmatch(self.right_color):
+                raise ValueError("right_color must be a #RRGGBB hex color")
         return self
 
 

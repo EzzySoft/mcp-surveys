@@ -234,7 +234,7 @@ class SurveyService:
                 raise SurveyValidationError("ranking answer must include every option exactly once")
         elif question.type == "matching":
             self._validate_matching(answer.value, question)
-        elif question.type == "scale":
+        elif question.type in {"scale", "binary_tradeoff"}:
             self._validate_scale(answer.value, question)
         elif question.type == "text":
             if not isinstance(answer.value, str) or len(answer.value) > MAX_TEXT_ANSWER_CHARS:
@@ -378,7 +378,26 @@ class SurveyService:
                 }
                 for left_id, right_id in answer.value.items()
             ]
+        if question.type == "binary_tradeoff":
+            value = answer.value
+            return {
+                "value": value,
+                "lean": "left" if value < 0 else "right" if value > 0 else "balanced",
+                "strength": self._tradeoff_strength(abs(value)),
+                "left": {"id": question.left[0].id, "text": question.left[0].text},
+                "right": {"id": question.right[0].id, "text": question.right[0].text},
+            }
         return answer.value
+
+    @staticmethod
+    def _tradeoff_strength(value: int) -> str:
+        if value == 0:
+            return "balanced"
+        if value < 35:
+            return "mild"
+        if value < 70:
+            return "clear"
+        return "strong"
 
     @staticmethod
     def _markdown_answer(answer: Any) -> str:

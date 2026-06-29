@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from mcp_surveys.errors import RateLimitExceeded, SurveyValidationError
 from mcp_surveys.models import AnswerIn, CreateSurveyRequest, Option, Question
@@ -91,6 +92,50 @@ async def test_scale_question_accepts_number_in_range():
     answers = await service.get_answers(created.survey_id, created.result_token)
 
     assert answers.answers[0].answer == 75
+
+
+@pytest.mark.asyncio
+async def test_binary_tradeoff_returns_lean_metadata():
+    service = SurveyService(MemoryStore(), "https://survey.test", 3600, 10800)
+    created = await service.create_survey(
+        CreateSurveyRequest(
+            title="Release lean",
+            questions=[
+                Question(
+                    id="release-lean",
+                    type="binary_tradeoff",
+                    prompt="Where should this release lean?",
+                    left=[Option(id="ship", text="Ship this week")],
+                    right=[Option(id="safe", text="Reduce launch risk")],
+                    theme="calm",
+                )
+            ],
+        ),
+        client_key="127.0.0.1",
+    )
+
+    await service.save_answer(created.survey_id, "release-lean", AnswerIn(value=35))
+    answers = await service.get_answers(created.survey_id, created.result_token)
+
+    assert answers.answers[0].answer == {
+        "value": 35,
+        "lean": "right",
+        "strength": "clear",
+        "left": {"id": "ship", "text": "Ship this week"},
+        "right": {"id": "safe", "text": "Reduce launch risk"},
+    }
+
+
+def test_binary_tradeoff_custom_theme_requires_colors():
+    with pytest.raises(ValidationError, match="custom theme requires left_color and right_color"):
+        Question(
+            id="release-lean",
+            type="binary_tradeoff",
+            prompt="Where should this release lean?",
+            left=[Option(id="ship", text="Ship this week")],
+            right=[Option(id="safe", text="Reduce launch risk")],
+            theme="custom",
+        )
 
 
 @pytest.mark.asyncio

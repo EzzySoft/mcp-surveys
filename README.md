@@ -165,11 +165,14 @@ Question types:
 - `ranking`: move options up or down by priority.
 - `matching`: connect left-side items to right-side items.
 - `scale`: slide to express confidence, risk, intensity, fit, or any other degree.
+- `binary_tradeoff`: place a marker between option A and option B when both
+  theses are true enough to argue. Use `signal`, `mono`, or `calm` presets, or
+  `custom` with both `left_color` and `right_color` as `#RRGGBB`.
 - `text`: the emergency hatch for answers that cannot be structured.
 
-Prefer buttons, lists, ranking, matching, and scales. Use `text` only when the
-answer refuses to become one of those. The point is less typing for the human
-and less interpretation for you.
+Prefer buttons, lists, ranking, matching, scales, and tradeoffs. Use `text` only
+when the answer refuses to become one of those. The point is less typing for the
+human and less interpretation for you.
 
 ## Tools You Get
 
@@ -227,6 +230,20 @@ IDs are optional. If you skip them, the server makes stable IDs from text.
       "max_label": "Certain"
     },
     {
+      "type": "binary_tradeoff",
+      "prompt": "Where should this release lean?",
+      "required": true,
+      "left": [
+        { "id": "ship", "text": "Ship this week" }
+      ],
+      "right": [
+        { "id": "safe", "text": "Reduce launch risk" }
+      ],
+      "theme": "signal",
+      "left_color": "#c6533d",
+      "right_color": "#126a74"
+    },
+    {
       "type": "matching",
       "prompt": "Match owners to workstreams.",
       "required": false,
@@ -245,12 +262,11 @@ IDs are optional. If you skip them, the server makes stable IDs from text.
 
 ## Interaction Ideas for Later
 
-Not implemented yet, but good future shapes for agents who want richer human
-signals without asking for essays:
+Not implemented yet, but still good future shapes for agents who want richer
+human signals without asking for essays:
 
 - `budget_split`: divide 100 points across options.
 - `matrix_rating`: rate several items against the same small scale.
-- `binary_tradeoff`: drag a marker between two competing statements.
 - `timeline_pick`: choose a date or time window on a compact timeline.
 - `mood_board`: pick the closest visual/text chip from a small set.
 

@@ -28,10 +28,11 @@ def build_mcp(service: SurveyService) -> FastMCP:
         "mcp-surveys",
         instructions=(
             "Create short-lived, tappable surveys for humans when plain chat would be clumsy. "
-            "Prefer single_choice, multiple_choice, ranking, matching, or scale. Use scale for "
-            "confidence, intensity, risk, fit, or other degree answers. Use text only when the "
-            "answer cannot be represented by the other question types. Public links expire; "
-            "never expose result_token to the respondent."
+            "Prefer single_choice, multiple_choice, ranking, matching, scale, or binary_tradeoff. "
+            "Use scale for confidence, intensity, risk, fit, or other degree answers. Use "
+            "binary_tradeoff when two competing theses are both valid and the human should place "
+            "a marker between A and B. Use text only when the answer cannot be represented by the "
+            "other question types. Public links expire; never expose result_token to the respondent."
         ),
     )
 
@@ -93,6 +94,16 @@ def build_mcp(service: SurveyService) -> FastMCP:
             "ranking": {"value": ["first_option_id", "second_option_id"]},
             "matching": {"left_item_id": "right_item_id"},
             "scale": {"value": 75, "fields": {"min": 0, "max": 100, "step": 5, "min_label": "Guess", "max_label": "Certain"}},
+            "binary_tradeoff": {
+                "value": 35,
+                "fields": {
+                    "left": [{"id": "A", "text": "Ship this week"}],
+                    "right": [{"id": "B", "text": "Reduce launch risk"}],
+                    "theme": "signal | mono | calm | custom; custom requires both colors",
+                    "left_color": "#c6533d",
+                    "right_color": "#126a74",
+                },
+            },
             "text": "Use only when other types cannot express the answer.",
             "limits": {
                 "questions": 50,

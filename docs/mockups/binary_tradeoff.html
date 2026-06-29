@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Binary Tradeoff Mockup</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f7f6f1;
+      --ink: #141614;
+      --muted: #68706b;
+      --line: #d9ddd5;
+      --panel: #ffffff;
+      --left: #c6533d;
+      --left-soft: #fae9e3;
+      --right: #126a74;
+      --right-soft: #e2f3f2;
+      --balanced: #313734;
+      --shadow: 0 22px 70px rgba(19, 27, 23, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(20, 22, 20, 0.04) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(20, 22, 20, 0.04) 1px, transparent 1px),
+        var(--paper);
+      background-size: 36px 36px;
+      color: var(--ink);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    main {
+      width: min(980px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 44px 0;
+    }
+
+    .shell {
+      display: grid;
+      gap: 22px;
+    }
+
+    .header {
+      display: grid;
+      gap: 10px;
+      max-width: 760px;
+    }
+
+    .eyebrow {
+      margin: 0;
+      color: var(--right);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(42px, 7vw, 82px);
+      font-weight: 500;
+      line-height: 0.94;
+      letter-spacing: 0;
+    }
+
+    .intro {
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.55;
+    }
+
+    .theme-bar,
+    .tradeoff {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: var(--shadow);
+    }
+
+    .theme-bar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: center;
+      padding: 14px;
+    }
+
+    .theme-title {
+      display: grid;
+      gap: 3px;
+    }
+
+    .theme-title strong {
+      font-size: 15px;
+    }
+
+    .theme-title span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .theme-controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: end;
+      gap: 8px;
+    }
+
+    .theme-controls button {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 0 12px;
+    }
+
+    .theme-controls button.is-active {
+      border-color: var(--ink);
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .color-pick {
+      display: grid;
+      grid-template-columns: auto 34px;
+      gap: 6px;
+      align-items: center;
+      min-height: 38px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .color-pick input {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .tradeoff {
+      display: grid;
+      gap: 20px;
+      padding: 22px;
+    }
+
+    .question-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: start;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .confidence-pill {
+      display: grid;
+      place-items: center;
+      min-width: 138px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #edf0eb;
+      color: var(--balanced);
+      font-size: 13px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .definitions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .definition-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 14px;
+      min-height: 132px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .definition-card.left {
+      border-color: color-mix(in srgb, var(--left) 32%, transparent);
+      background: linear-gradient(180deg, var(--left-soft), #fff 72%);
+    }
+
+    .definition-card.right {
+      border-color: color-mix(in srgb, var(--right) 32%, transparent);
+      background: linear-gradient(180deg, var(--right-soft), #fff 72%);
+    }
+
+    .option-mark {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 28px;
+      font-weight: 950;
+    }
+
+    .left .option-mark {
+      background: var(--left);
+    }
+
+    .right .option-mark {
+      background: var(--right);
+    }
+
+    .definition-copy {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .definition-copy span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .definition-copy strong {
+      font-size: 20px;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+
+    .definition-copy p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .slider-zone {
+      display: grid;
+      gap: 12px;
+      padding: 8px 2px 2px;
+    }
+
+    .axis {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 12px;
+      align-items: end;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .axis-end {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 9px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .axis-end.right {
+      grid-template-columns: minmax(0, 1fr) auto;
+      text-align: right;
+    }
+
+    .axis-letter {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 950;
+    }
+
+    .axis-end.left .axis-letter {
+      background: var(--left);
+    }
+
+    .axis-end.right .axis-letter {
+      background: var(--right);
+    }
+
+    .axis-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 860px) {
+      .axis-title {
+        display: none;
+      }
+
+      .axis-end,
+      .axis-end.right {
+        grid-template-columns: auto;
+      }
+
+      .axis-end.right {
+        justify-items: end;
+      }
+    }
+
+    .axis-zero {
+      color: var(--balanced);
+      text-align: center;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 22px;
+      margin: 0;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 12px;
+      border-radius: 999px;
+      background: var(--track);
+      box-shadow: inset 0 0 0 1px rgba(20, 22, 20, 0.08);
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 12px;
+      border-radius: 999px;
+      background: var(--track);
+      box-shadow: inset 0 0 0 1px rgba(20, 22, 20, 0.08);
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      width: 34px;
+      height: 34px;
+      margin-top: -11px;
+      appearance: none;
+      border: 4px solid #fff;
+      border-radius: 999px;
+      background: var(--thumb);
+      box-shadow: 0 9px 26px rgba(20, 22, 20, 0.28);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 26px;
+      height: 26px;
+      border: 4px solid #fff;
+      border-radius: 999px;
+      background: var(--thumb);
+      box-shadow: 0 9px 26px rgba(20, 22, 20, 0.28);
+    }
+
+    .readout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfa;
+    }
+
+    .readout strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--readout-color);
+      font-size: 18px;
+    }
+
+    .readout span {
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .score {
+      display: grid;
+      place-items: center;
+      width: 74px;
+      height: 58px;
+      border-radius: 8px;
+      background: var(--readout-soft);
+      color: var(--readout-color);
+      font-size: 28px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .quick-picks {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+
+    .quick-picks button {
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 750;
+      transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+    }
+
+    .quick-picks button:hover,
+    .quick-picks button:focus-visible {
+      border-color: var(--right);
+      background: #f8fbfa;
+      outline: none;
+      transform: translateY(-1px);
+    }
+
+    .payload {
+      display: grid;
+      gap: 8px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #171a18;
+      color: #ecf1ec;
+    }
+
+    .payload span {
+      color: #93aaa2;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    pre {
+      margin: 0;
+      overflow-x: auto;
+      color: #dbe8df;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 760px) {
+      main {
+        padding: 22px 0;
+      }
+
+      .theme-bar,
+      .question-row,
+      .definitions,
+      .readout,
+      .quick-picks {
+        grid-template-columns: 1fr;
+      }
+
+      .theme-controls {
+        justify-content: start;
+      }
+
+      .confidence-pill,
+      .score {
+        width: 100%;
+      }
+
+      .axis-title {
+        display: none;
+      }
+
+      .axis-end,
+      .axis-end.right {
+        grid-template-columns: auto;
+      }
+
+      .axis-end.right {
+        justify-items: end;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="shell" aria-label="Binary tradeoff demo">
+      <header class="header">
+        <p class="eyebrow">binary_tradeoff</p>
+        <h1>Place the marker between A and B.</h1>
+        <p class="intro">
+          Use this when both theses are real and the useful answer is the lean,
+          not a fake yes/no.
+        </p>
+      </header>
+
+      <section class="theme-bar" aria-label="Color controls">
+        <div class="theme-title">
+          <strong>Color choice belongs to the agent.</strong>
+          <span>Pick a preset, or set A/B colors directly for this question.</span>
+        </div>
+        <div class="theme-controls">
+          <button type="button" data-theme="signal">Signal</button>
+          <button type="button" data-theme="mono">Black / white</button>
+          <button type="button" data-theme="calm">Calm</button>
+          <button type="button" data-theme="custom">Agent picks</button>
+          <label class="color-pick">A <input id="left-color" type="color" value="#c6533d"></label>
+          <label class="color-pick">B <input id="right-color" type="color" value="#126a74"></label>
+        </div>
+      </section>
+
+      <article class="tradeoff">
+        <div class="question-row">
+          <h2>Where should this release lean?</h2>
+          <div class="confidence-pill" id="pill">Balanced</div>
+        </div>
+
+        <div class="definitions">
+          <section class="definition-card left">
+            <div class="option-mark">A</div>
+            <div class="definition-copy">
+              <span>Option A / left thesis</span>
+              <strong id="left-title">Ship this week</strong>
+              <p>Momentum matters. The current version is useful enough and the
+                remaining gaps can be handled after launch.</p>
+            </div>
+          </section>
+
+          <section class="definition-card right">
+            <div class="option-mark">B</div>
+            <div class="definition-copy">
+              <span>Option B / right thesis</span>
+              <strong id="right-title">Reduce launch risk</strong>
+              <p>One more pass lowers support load and makes the rollout easier
+                to explain, monitor, and recover.</p>
+            </div>
+          </section>
+        </div>
+
+        <div class="slider-zone">
+          <div class="axis" aria-hidden="true">
+            <div class="axis-end left">
+              <span class="axis-letter">A</span>
+              <span class="axis-title">Ship this week</span>
+            </div>
+            <span class="axis-zero">0</span>
+            <div class="axis-end right">
+              <span class="axis-title">Reduce launch risk</span>
+              <span class="axis-letter">B</span>
+            </div>
+          </div>
+          <label>
+            <span class="sr-only">Tradeoff position between option A and option B</span>
+            <input id="tradeoff" type="range" min="-100" max="100" step="5" value="25">
+          </label>
+        </div>
+
+        <div class="readout" id="readout">
+          <div>
+            <strong id="headline">Leaning toward B</strong>
+            <span id="caption">A mild lean. Ship soon, but keep one extra safety check.</span>
+          </div>
+          <div class="score" id="score">25</div>
+        </div>
+
+        <div class="quick-picks" aria-label="Quick positions">
+          <button type="button" data-value="-80">A hard</button>
+          <button type="button" data-value="-35">A soft</button>
+          <button type="button" data-value="0">Balance</button>
+          <button type="button" data-value="35">B soft</button>
+          <button type="button" data-value="80">B hard</button>
+        </div>
+
+        <div class="payload">
+          <span>Agent receives</span>
+          <pre id="payload"></pre>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const slider = document.getElementById("tradeoff");
+    const pill = document.getElementById("pill");
+    const headline = document.getElementById("headline");
+    const caption = document.getElementById("caption");
+    const score = document.getElementById("score");
+    const payload = document.getElementById("payload");
+    const readout = document.getElementById("readout");
+    const leftColor = document.getElementById("left-color");
+    const rightColor = document.getElementById("right-color");
+    const themeButtons = document.querySelectorAll("[data-theme]");
+    let themeName = "signal";
+
+    const themes = {
+      signal: {
+        left: "#c6533d",
+        leftSoft: "#fae9e3",
+        right: "#126a74",
+        rightSoft: "#e2f3f2"
+      },
+      mono: {
+        left: "#111111",
+        leftSoft: "#eeeeee",
+        right: "#777777",
+        rightSoft: "#f7f7f7"
+      },
+      calm: {
+        left: "#5b6ee1",
+        leftSoft: "#e9ecff",
+        right: "#228b5f",
+        rightSoft: "#e2f5ea"
+      }
+    };
+
+    function hexToSoft(hex) {
+      const clean = hex.replace("#", "");
+      const value = parseInt(clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean, 16);
+      const r = (value >> 16) & 255;
+      const g = (value >> 8) & 255;
+      const b = value & 255;
+      return `rgb(${Math.round(r + (255 - r) * 0.86)}, ${Math.round(g + (255 - g) * 0.86)}, ${Math.round(b + (255 - b) * 0.86)})`;
+    }
+
+    function strength(absValue) {
+      if (absValue === 0) return "balanced";
+      if (absValue < 35) return "mild";
+      if (absValue < 70) return "clear";
+      return "strong";
+    }
+
+    function applyTheme(nextTheme) {
+      themeName = nextTheme;
+      const theme = nextTheme === "custom"
+        ? {
+          left: leftColor.value,
+          leftSoft: hexToSoft(leftColor.value),
+          right: rightColor.value,
+          rightSoft: hexToSoft(rightColor.value)
+        }
+        : themes[nextTheme];
+
+      document.documentElement.style.setProperty("--left", theme.left);
+      document.documentElement.style.setProperty("--left-soft", theme.leftSoft);
+      document.documentElement.style.setProperty("--right", theme.right);
+      document.documentElement.style.setProperty("--right-soft", theme.rightSoft);
+      leftColor.value = theme.left;
+      rightColor.value = theme.right;
+      themeButtons.forEach((button) => button.classList.toggle("is-active", button.dataset.theme === nextTheme));
+      update();
+    }
+
+    function update() {
+      const value = Number(slider.value);
+      const absValue = Math.abs(value);
+      const lean = value < 0 ? "A" : value > 0 ? "B" : "balanced";
+      const label = value < 0 ? "A" : value > 0 ? "B" : "balance";
+      const color = value < 0 ? "var(--left)" : value > 0 ? "var(--right)" : "var(--balanced)";
+      const soft = value < 0 ? "var(--left-soft)" : value > 0 ? "var(--right-soft)" : "#edf0eb";
+      const percent = ((value + 100) / 200) * 100;
+
+      document.documentElement.style.setProperty("--track", `linear-gradient(90deg, var(--left) 0%, var(--left) ${percent}%, var(--right) ${percent}%, var(--right) 100%)`);
+      document.documentElement.style.setProperty("--thumb", color);
+      document.documentElement.style.setProperty("--readout-color", color);
+      document.documentElement.style.setProperty("--readout-soft", soft);
+
+      pill.textContent = value === 0 ? "Balanced" : `${strength(absValue)} lean`;
+      headline.textContent = value === 0 ? "Balanced tradeoff" : `Leaning toward ${label}`;
+      caption.textContent = value === 0
+        ? "Both theses carry equal weight. Ask for a tie-breaker only if action depends on it."
+        : `${strength(absValue)} signal. Treat this as a ${absValue}/100 pull toward option ${label}.`;
+      score.textContent = value > 0 ? `+${value}` : String(value);
+      readout.style.borderColor = value === 0 ? "var(--line)" : color;
+
+      payload.textContent = JSON.stringify({
+        type: "binary_tradeoff",
+        question_id: "release_lean",
+        left: { id: "A", label: "ship_this_week", color: leftColor.value },
+        right: { id: "B", label: "reduce_launch_risk", color: rightColor.value },
+        value,
+        lean,
+        strength: strength(absValue),
+        theme: themeName
+      }, null, 2);
+    }
+
+    slider.addEventListener("input", update);
+    themeButtons.forEach((button) => button.addEventListener("click", () => applyTheme(button.dataset.theme)));
+    leftColor.addEventListener("input", () => applyTheme("custom"));
+    rightColor.addEventListener("input", () => applyTheme("custom"));
+    document.querySelectorAll("[data-value]").forEach((button) => {
+      button.addEventListener("click", () => {
+        slider.value = button.dataset.value;
+        update();
+      });
+    });
+
+    applyTheme("signal");
+  </script>
+</body>
+</html>

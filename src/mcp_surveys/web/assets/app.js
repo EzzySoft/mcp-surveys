@@ -14,6 +14,7 @@ function questionTypeLabel(type) {
     ranking: "Rank",
     matching: "Match",
     scale: "Scale",
+    binary_tradeoff: "Tradeoff",
     text: "Short answer",
   };
   return labels[type] || type.replace("_", " ");
@@ -54,7 +55,7 @@ async function save(question, value, customOptions = {}) {
   renderProgress();
   setStatus("Saving");
   try {
-      state.survey = await api(`${basePath}/api/surveys/${surveyId}/answers/${question.id}`, {
+    state.survey = await api(`${basePath}/api/surveys/${surveyId}/answers/${question.id}`, {
       method: "PUT",
       body: JSON.stringify({ value, custom_options: customOptions }),
     });
@@ -97,7 +98,7 @@ function optionButton(question, option, selected, onClick) {
 }
 
 function renderCustom(question, wrapper, currentCustom = {}) {
-  if (!question.allow_custom || question.type === "matching" || question.type === "text") return;
+  if (!question.allow_custom || ["matching", "scale", "binary_tradeoff", "text"].includes(question.type)) return;
 
   const row = document.createElement("div");
   row.className = "custom-row";
@@ -312,6 +313,157 @@ function renderScale(question) {
   return wrapper;
 }
 
+function hexToSoft(hex) {
+  const clean = (hex || "").replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return "#eee7f0";
+  const value = Number.parseInt(clean, 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgb(${Math.round(r + (255 - r) * 0.86)}, ${Math.round(g + (255 - g) * 0.86)}, ${Math.round(b + (255 - b) * 0.86)})`;
+}
+
+function tradeoffTheme(question) {
+  const themes = {
+    signal: { left: "#c6533d", leftSoft: "#fae9e3", right: "#126a74", rightSoft: "#e2f3f2" },
+    mono: { left: "#111111", leftSoft: "#eeeeee", right: "#777777", rightSoft: "#f7f7f7" },
+    calm: { left: "#5b6ee1", leftSoft: "#e9ecff", right: "#228b5f", rightSoft: "#e2f5ea" },
+  };
+  const base = themes[question.theme] || themes.signal;
+  return {
+    left: question.left_color || base.left,
+    leftSoft: question.left_color ? hexToSoft(question.left_color) : base.leftSoft,
+    right: question.right_color || base.right,
+    rightSoft: question.right_color ? hexToSoft(question.right_color) : base.rightSoft,
+  };
+}
+
+function tradeoffStrength(absValue) {
+  if (absValue === 0) return "balanced";
+  if (absValue < 35) return "mild";
+  if (absValue < 70) return "clear";
+  return "strong";
+}
+
+function renderBinaryTradeoff(question) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "binary-tradeoff";
+  const left = question.left[0];
+  const right = question.right[0];
+  const min = Number.isFinite(question.min) ? question.min : -100;
+  const max = Number.isFinite(question.max) ? question.max : 100;
+  const step = Number.isFinite(question.step) ? question.step : 5;
+  const answer = currentAnswer(question);
+  const value = Number.isFinite(Number(answer?.value)) ? Number(answer.value) : 0;
+  const theme = tradeoffTheme(question);
+  wrapper.style.setProperty("--tradeoff-left", theme.left);
+  wrapper.style.setProperty("--tradeoff-left-soft", theme.leftSoft);
+  wrapper.style.setProperty("--tradeoff-right", theme.right);
+  wrapper.style.setProperty("--tradeoff-right-soft", theme.rightSoft);
+
+  const definitions = document.createElement("div");
+  definitions.className = "tradeoff-definitions";
+  const leftCard = tradeoffDefinition("A", "Left thesis", left.text, "left");
+  const rightCard = tradeoffDefinition("B", "Right thesis", right.text, "right");
+  definitions.append(leftCard, rightCard);
+
+  const axis = document.createElement("div");
+  axis.className = "tradeoff-axis";
+  axis.innerHTML = `
+    <div class="tradeoff-axis-end tradeoff-axis-end--left">
+      <span class="tradeoff-letter">A</span>
+      <span class="tradeoff-axis-title"></span>
+    </div>
+    <span class="tradeoff-zero">0</span>
+    <div class="tradeoff-axis-end tradeoff-axis-end--right">
+      <span class="tradeoff-axis-title"></span>
+      <span class="tradeoff-letter">B</span>
+    </div>
+  `;
+  axis.querySelector(".tradeoff-axis-end--left .tradeoff-axis-title").textContent = left.text;
+  axis.querySelector(".tradeoff-axis-end--right .tradeoff-axis-title").textContent = right.text;
+
+  const input = document.createElement("input");
+  input.type = "range";
+  input.className = "tradeoff-range";
+  input.min = String(min);
+  input.max = String(max);
+  input.step = String(step);
+  input.value = String(value);
+  input.setAttribute("aria-label", question.prompt);
+
+  const readout = document.createElement("div");
+  readout.className = "tradeoff-readout";
+  const readoutCopy = document.createElement("div");
+  const headline = document.createElement("strong");
+  const caption = document.createElement("span");
+  readoutCopy.append(headline, caption);
+  const score = document.createElement("div");
+  score.className = "tradeoff-score";
+  readout.append(readoutCopy, score);
+
+  const quick = document.createElement("div");
+  quick.className = "tradeoff-quick-picks";
+  [
+    ["A hard", -80],
+    ["A soft", -35],
+    ["Balance", 0],
+    ["B soft", 35],
+    ["B hard", 80],
+  ].forEach(([label, next]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      input.value = String(next);
+      setTradeoffValue(next);
+      save(question, next);
+    });
+    quick.append(button);
+  });
+
+  const setTradeoffValue = (next) => {
+    const percent = max === min ? 50 : ((next - min) / (max - min)) * 100;
+    const lean = next < 0 ? "A" : next > 0 ? "B" : "balance";
+    const absValue = Math.abs(next);
+    wrapper.style.setProperty("--tradeoff-progress", `${Math.min(100, Math.max(0, percent))}%`);
+    wrapper.style.setProperty("--tradeoff-active", next < 0 ? theme.left : next > 0 ? theme.right : "var(--accent)");
+    wrapper.style.setProperty("--tradeoff-active-soft", next < 0 ? theme.leftSoft : next > 0 ? theme.rightSoft : "var(--accent-soft)");
+    headline.textContent = next === 0 ? "Balanced tradeoff" : `Leaning toward ${lean}`;
+    caption.textContent = next === 0
+      ? "Both theses carry equal weight."
+      : `${tradeoffStrength(absValue)} signal. Treat this as a ${absValue}/100 pull toward option ${lean}.`;
+    score.textContent = next > 0 ? `+${next}` : String(next);
+  };
+
+  input.addEventListener("input", () => {
+    const next = Number(input.value);
+    setTradeoffValue(next);
+    save(question, next);
+  });
+
+  setTradeoffValue(value);
+  wrapper.append(definitions, axis, input, readout, quick);
+  return wrapper;
+}
+
+function tradeoffDefinition(letter, label, text, side) {
+  const card = document.createElement("section");
+  card.className = `tradeoff-definition tradeoff-definition--${side}`;
+  const mark = document.createElement("span");
+  mark.className = "tradeoff-definition-letter";
+  mark.textContent = letter;
+  const copy = document.createElement("div");
+  copy.className = "tradeoff-definition-copy";
+  const eyebrow = document.createElement("span");
+  eyebrow.textContent = label;
+  const title = document.createElement("strong");
+  title.textContent = text;
+  copy.append(eyebrow, title);
+  card.append(mark, copy);
+  return card;
+}
+
 function renderQuestion(question) {
   const existing = document.querySelector(`[data-question-id="${question.id}"]`);
   const section = existing || document.createElement("article");
@@ -334,6 +486,7 @@ function renderQuestion(question) {
   if (question.type === "ranking") section.append(renderRanking(question));
   if (question.type === "matching") section.append(renderMatching(question));
   if (question.type === "scale") section.append(renderScale(question));
+  if (question.type === "binary_tradeoff") section.append(renderBinaryTradeoff(question));
   if (question.type === "text") section.append(renderText(question));
 
   if (!existing) $("questions").append(section);
