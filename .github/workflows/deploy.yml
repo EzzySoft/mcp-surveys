@@ -1,0 +1,52 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Prepare SSH
+        env:
+          SSH_HOST: ${{ secrets.CLAW_SSH_HOST }}
+          SSH_PORT: ${{ secrets.CLAW_SSH_PORT }}
+          SSH_PRIVATE_KEY: ${{ secrets.CLAW_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST"
+          test -n "$SSH_PRIVATE_KEY"
+          SSH_PORT="${SSH_PORT:-22}"
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/claw_deploy_key
+          chmod 600 ~/.ssh/claw_deploy_key
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy on claw
+        env:
+          SSH_HOST: ${{ secrets.CLAW_SSH_HOST }}
+          SSH_PORT: ${{ secrets.CLAW_SSH_PORT }}
+          SSH_USER: ${{ secrets.CLAW_SSH_USER }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          SSH_PORT="${SSH_PORT:-22}"
+
+          ssh -i ~/.ssh/claw_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" <<'REMOTE'
+          set -euo pipefail
+          cd ~/mcp-surveys
+          git pull --ff-only origin main
+          docker compose up -d --build
+          docker compose ps
+          curl -fsS http://127.0.0.1:18173/health
+          REMOTE
