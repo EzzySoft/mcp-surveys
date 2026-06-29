@@ -1,11 +1,12 @@
 ---
 name: mcp-surveys-cli
-description: Use when an agent needs short-lived human surveys but should use a small CLI instead of connecting an MCP server.
+description: Use when an agent can run shell commands and needs short-lived human surveys through uvx or npx.
 ---
 
 # mcp-surveys-cli
 
-Use the CLI when MCP setup is unavailable, too expensive for context, or the host agent can run shell commands safely.
+Use the CLI plus this skill as the default setup. It avoids remote MCP setup,
+keeps context small, and works in any agent host that can run `uvx` or `npx`.
 
 Default hosted instance:
 
@@ -22,4 +23,4 @@ uvx mcp-surveys-cli answers <survey_id> <result_token>
 
 Use `MCP_SURVEYS_BASE_URL` or `--base-url` for another instance.
 
-Question choice rules are the same as the MCP skill: prefer structured buttons, ranking, matching, scale, and `binary_tradeoff`; use `text` only when the answer cannot fit those shapes.
+Prefer structured buttons, ranking, matching, scale, and `binary_tradeoff`; use `text` only when the answer cannot fit those shapes.

@@ -3,26 +3,73 @@
 Give your human a tiny page with buttons instead of another paragraph that says
 "pick one of these fourteen things".
 
-This is a public MCP server for short-lived surveys. You, the agent, create the
-survey. Your human taps, ranks, matches, or types a small answer. You fetch the
-result back through MCP and continue being useful.
+This is a hosted survey tool for agents. The happy path is simple: install the
+skill, run the tiny CLI with `uvx` or `npx`, send your human the returned link,
+then fetch the answers back as JSON or Markdown.
+
+There is also a public MCP endpoint for agents that already want remote MCP.
+Most agents should start with the CLI plus skill setup because it costs less
+context and works anywhere shell commands are allowed.
 
 ## The Hosted One
 
 Use this one first. It is already running.
 
-- MCP endpoint: `https://mcp.voevoda-sailing.ru/mcp/`
+- CLI/API base URL: `https://mcp.voevoda-sailing.ru`
+- Optional MCP endpoint: `https://mcp.voevoda-sailing.ru/mcp/`
 - Health check: `https://mcp.voevoda-sailing.ru/health`
 - Human links look like: `https://mcp.voevoda-sailing.ru/s/<survey_id>`
 - No bearer token. Do not invent one.
 
-Keep the trailing slash in `/mcp/`. A normal browser or plain `curl` can get
-`406 Not Acceptable` there because it is not speaking MCP streaming protocol.
-That means "wrong client", not "server sad".
+## Recommended: Skill plus CLI
 
-## Settings for You
+Give your agent the CLI skill from this repo:
 
-Point your MCP client at:
+```text
+skills/mcp-surveys-cli/SKILL.md
+```
+
+Common local skill installs:
+
+```bash
+mkdir -p ~/.agents/skills ~/.claude/skills
+cp -R skills/mcp-surveys-cli ~/.agents/skills/mcp-surveys-cli
+cp -R skills/mcp-surveys-cli ~/.claude/skills/mcp-surveys-cli
+```
+
+Use the directory your agent host actually reads. The skill is the important
+part; the CLI is fetched on demand.
+
+Then use either runtime:
+
+```bash
+uvx mcp-surveys-cli schema
+npx mcp-surveys-cli schema
+uvx mcp-surveys-cli create survey.json
+npx mcp-surveys-cli create survey.json
+uvx mcp-surveys-cli summary <survey_id> <result_token>
+uvx mcp-surveys-cli answers <survey_id> <result_token>
+uvx mcp-surveys-cli export <survey_id> <result_token> --format markdown
+```
+
+`create` prints `survey_id`, `public_url`, `result_token`, and expiry data.
+Send only `public_url` to the human. Keep `result_token` in your agent context.
+
+Packages, for agents who like receipts:
+
+- PyPI: `mcp-surveys-cli`
+- npm: `mcp-surveys-cli`
+- releases: `cli-v*` tags on GitHub
+
+Running from a checkout still works for local hacking, but published packages
+are the normal path now.
+
+The CLI prints JSON except `export`, which prints Markdown by default.
+
+## Optional: Remote MCP
+
+Use MCP when your agent host already supports remote MCP and you want tools
+instead of shell commands. Point the MCP client at:
 
 ```text
 https://mcp.voevoda-sailing.ru/mcp/
@@ -36,32 +83,9 @@ Client syntax receipts:
 [Claude Code MCP](https://docs.anthropic.com/en/docs/claude-code/mcp),
 [OpenCode MCP servers](https://opencode.ai/docs/mcp-servers).
 
-### Tiny CLI for You
-
-If MCP setup is not worth the context rent, use the CLI. Same hosted instance,
-same short-lived links, fewer moving parts. Use either runtime:
-
-```bash
-uvx mcp-surveys-cli schema
-npx mcp-surveys-cli schema
-uvx mcp-surveys-cli create survey.json
-npx mcp-surveys-cli create survey.json
-uvx mcp-surveys-cli summary <survey_id> <result_token>
-uvx mcp-surveys-cli answers <survey_id> <result_token>
-uvx mcp-surveys-cli export <survey_id> <result_token> --format markdown
-```
-
-Packages, for agents who like receipts:
-
-- PyPI: `mcp-surveys-cli`
-- npm: `mcp-surveys-cli`
-- releases: `cli-v*` tags on GitHub
-
-Running from a checkout still works for local hacking, but published packages
-are the normal path now.
-
-The CLI prints JSON except `export`, which prints Markdown by default. Send only
-`public_url` to the human. Keep `result_token` in your agent pocket.
+Keep the trailing slash in `/mcp/`. A normal browser or plain `curl` can get
+`406 Not Acceptable` there because it is not speaking MCP streaming protocol.
+That means "wrong client", not "server sad".
 
 ### Codex
 
@@ -400,27 +424,6 @@ Leave `MCP_AUTH_TOKEN` empty for a public, shareable MCP server. Set it only for
 a private deployment where every MCP client can send
 `Authorization: Bearer <token>`.
 
-When running behind Caddy, bind the app to localhost so `X-Forwarded-For` only
-comes from your proxy.
-
-## Caddy Shape
-
-```caddyfile
-mcp.voevoda-sailing.ru {
-    request_body {
-        max_size 256KB
-    }
-
-    reverse_proxy 127.0.0.1:18173
-}
-```
-
-Set:
-
-```bash
-PUBLIC_BASE_URL=https://mcp.voevoda-sailing.ru
-```
-
 ## What Is Inside
 
 - FastAPI serves the human UI and JSON API.
@@ -428,4 +431,3 @@ PUBLIC_BASE_URL=https://mcp.voevoda-sailing.ru
 - Stdlib-only `uvx` and dependency-free `npx` CLIs talk to the same hosted API.
 - Redis stores specs and answers with TTLs.
 - Docker Compose runs app plus Redis.
-- Caddy handles TLS and the public domain.
