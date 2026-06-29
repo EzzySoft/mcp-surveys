@@ -1,55 +1,61 @@
 # mcp-surveys
 
-Public MCP server for agent-created, human-friendly, short-lived surveys.
+Give your human a tiny page with buttons instead of another paragraph that says
+"pick one of these fourteen things".
 
-Use it when an agent needs to ask a person several structured questions and get
-the answers back into the agent context. The hosted instance is already live:
+This is a public MCP server for short-lived surveys. You, the agent, create the
+survey. Your human taps, ranks, matches, or types a small answer. You fetch the
+result back through MCP and continue being useful.
+
+## The Hosted One
+
+Use this one first. It is already running.
 
 - MCP endpoint: `https://mcp.voevoda-sailing.ru/mcp/`
 - Health check: `https://mcp.voevoda-sailing.ru/health`
-- Public survey links look like: `https://mcp.voevoda-sailing.ru/s/<survey_id>`
-- No bearer token is required for the hosted public instance.
+- Human links look like: `https://mcp.voevoda-sailing.ru/s/<survey_id>`
+- No bearer token. Do not invent one.
 
-The `/mcp/` trailing slash matters. A plain browser or `curl` request to
-`/mcp/` can return `406 Not Acceptable` because MCP clients send special
-streaming headers. That is expected and is not an auth failure.
+Keep the trailing slash in `/mcp/`. A normal browser or plain `curl` can get
+`406 Not Acceptable` there because it is not speaking MCP streaming protocol.
+That means "wrong client", not "server sad".
 
-## Connect Your Agent
+## Settings for You
 
-Point your MCP client at the hosted Streamable HTTP endpoint:
+Point your MCP client at:
 
 ```text
 https://mcp.voevoda-sailing.ru/mcp/
 ```
 
-Do not add an `Authorization` header for this hosted instance. It is public,
-rate-limited, and designed to be shareable between agents.
+No `Authorization` header is needed for the hosted instance. It is public,
+rate-limited, and meant for agent-to-agent sharing.
 
-Client references: [Codex MCP](https://developers.openai.com/codex/mcp),
+Client syntax receipts:
+[Codex MCP](https://developers.openai.com/codex/mcp),
 [Claude Code MCP](https://docs.anthropic.com/en/docs/claude-code/mcp),
 [OpenCode MCP servers](https://opencode.ai/docs/mcp-servers).
 
 ### Codex
 
-Add this to `~/.codex/config.toml` or to a project-local `.codex/config.toml`:
+Add this to `~/.codex/config.toml` or project `.codex/config.toml`:
 
 ```toml
 [mcp_servers.mcp_surveys]
 url = "https://mcp.voevoda-sailing.ru/mcp/"
 ```
 
-Restart Codex or open `/mcp` in the Codex TUI to confirm that the server and
-tools are visible.
+Restart Codex, or open `/mcp` in the TUI, and check that `mcp_surveys` is alive.
 
 ### Claude Code
 
-Use the HTTP transport:
+Tell Claude Code about the button machine:
 
 ```bash
 claude mcp add --transport http mcp-surveys --scope user https://mcp.voevoda-sailing.ru/mcp/
 ```
 
-Project-scoped config equivalent:
+Project config shape:
 
 ```json
 {
@@ -80,7 +86,7 @@ Add a remote MCP server to `~/.config/opencode/opencode.jsonc`:
 
 ### Hermes
 
-Use the same hosted MCP URL in the remote/HTTP MCP server section:
+Use the hosted URL in the remote/HTTP MCP block:
 
 ```json
 {
@@ -93,12 +99,12 @@ Use the same hosted MCP URL in the remote/HTTP MCP server section:
 }
 ```
 
-If your Hermes config calls the field `transport` instead of `type`, keep the
-same URL and set the transport to `streamable-http` or `http`.
+If Hermes calls the field `transport`, use `streamable-http` or `http` there.
+The URL is the important bit.
 
 ### OpenClaw
 
-For OpenClaw-style configs, add the hosted server as a remote MCP:
+Remote MCP shape:
 
 ```jsonc
 {
@@ -112,7 +118,7 @@ For OpenClaw-style configs, add the hosted server as a remote MCP:
 }
 ```
 
-If your OpenClaw build uses the common `mcpServers` map instead, use:
+Common `mcpServers` shape:
 
 ```json
 {
@@ -125,62 +131,63 @@ If your OpenClaw build uses the common `mcpServers` map instead, use:
 }
 ```
 
-## Agent Playbook
+## How to Operate Your Human
 
-1. Use a survey only when chat text would be clumsy.
+1. Use a survey when chat text would be clumsy.
 2. Call `create_survey` with short, tappable questions.
-3. Send only `public_url` to the person and mention that it expires in one hour.
-4. Keep `survey_id` and `result_token` private in the agent context.
-5. After the person says they are done, call `get_survey_summary`.
-6. If the survey is partial, decide whether to ask them to finish or continue.
-7. Call `get_survey_answers`, `get_question_answer`, or `get_survey_export`.
+3. Send only `public_url` to the human.
+4. Say the link expires in one hour.
+5. Keep `survey_id` and `result_token` private in your agent context.
+6. When the human says "done", call `get_survey_summary`.
+7. If the survey is partial, either ask them to finish or use what you have.
+8. Fetch the goods with `get_survey_answers`, `get_question_answer`, or
+   `get_survey_export`.
 
-Never send `result_token` to the respondent. The public URL is enough for
-answering; the token is only for the agent reading results later.
+Do not send `result_token` to the human. The public URL lets them answer. The
+token lets you read results. Mixing those up is how a simple survey becomes a
+little incident report.
 
-## What It Creates
+## Human Input Shapes
 
-The browser UI is minimal and optimized for quick decisions:
+The UI is intentionally small:
 
 - every click or typed answer is saved immediately;
-- the final submit marks the survey as completed;
-- completed results stay readable for three hours by default;
-- active links expire after one hour by default;
-- each option-based question can allow a small "add my own option" flow;
-- the UI supports mobile and desktop usage.
+- final submit marks the survey as completed;
+- active links expire after one hour;
+- completed results stay readable for three hours;
+- option questions can let the human add their own option;
+- mobile and desktop both work.
 
-Supported question types:
+Question types:
 
-- `single_choice`: choose one option.
-- `multiple_choice`: choose several options.
+- `single_choice`: one option.
+- `multiple_choice`: several options.
 - `ranking`: move options up or down by priority.
 - `matching`: connect left-side items to right-side items.
-- `text`: free-form text, only when structured formats cannot express the answer.
+- `text`: the emergency hatch for answers that cannot be structured.
 
-Prefer structured questions. `text` is intentionally the fallback because long
-forms defeat the point of a fast, tappable agent survey.
+Prefer buttons, lists, ranking, and matching. Use `text` only when the answer
+refuses to become one of those. The point is less typing for the human and less
+interpretation for you.
 
-## MCP Tools
+## Tools You Get
 
-- `create_survey`: creates a survey and returns `survey_id`, `public_url`,
+- `create_survey`: make the survey and get `survey_id`, `public_url`,
   `result_token`, and expiry data.
-- `edit_survey`: edits title, description, or the full question list before the
-  survey is completed.
-- `get_survey`: returns the current survey spec and progress.
-- `get_survey_summary`: returns completion state, timing, and progress counts.
-- `get_survey_answers`: returns all answers with option labels resolved.
-- `get_question_answer`: returns one answer by question id.
-- `get_survey_export`: returns a compact JSON or Markdown export.
-- `question_schema`: returns supported question types and payload shapes.
+- `edit_survey`: make a small correction before completion.
+- `get_survey`: inspect the current survey spec and progress.
+- `get_survey_summary`: get status, timing, counts, and remaining storage time.
+- `get_survey_answers`: get all answers with option labels resolved.
+- `get_question_answer`: get one answer by question id.
+- `get_survey_export`: get compact Markdown or JSON.
+- `question_schema`: ask the server what shapes it accepts.
 
-Use `edit_survey` only for small corrections to an active survey, such as fixing
-one question or one option. If the survey needs a substantial rewrite, create a
-new survey and send a new link.
+Use `edit_survey` for tiny repairs. If you are rewriting the whole thing,
+create a new survey. Your future self will thank you by not needing a graph.
 
-## Example `create_survey` Payload
+## Example Payload
 
-IDs are optional. When omitted, the server generates stable IDs from question
-and option text.
+IDs are optional. If you skip them, the server makes stable IDs from text.
 
 ```json
 {
@@ -225,9 +232,9 @@ and option text.
 }
 ```
 
-## Hosted Instance Limits
+## Limits, Because Public Internet
 
-The public instance is intentionally small and Redis-backed:
+The hosted instance is intentionally small and Redis-backed:
 
 - `60` created surveys per client IP per hour.
 - `128 KiB` maximum serialized `create_survey` payload.
@@ -238,55 +245,61 @@ The public instance is intentionally small and Redis-backed:
 - `1200` characters per prompt.
 - `500` characters per option.
 - `2000` characters per description or free-text answer.
-- `1 hour` active survey link lifetime.
+- `1 hour` active survey lifetime.
 - `3 hours` completed result lifetime.
 
-Survey IDs and result tokens are generated with secure random URL-safe tokens.
-The public survey link is a capability URL: anyone with it can answer until it
-expires. The private `result_token` is required for reading answers through MCP.
+Survey IDs and result tokens are secure random URL-safe tokens. The public link
+is a capability URL: anyone with it can answer until it expires. The private
+`result_token` is required to read answers through MCP.
 
-## Self-Hosting
+## Self-Hosting, If You Must
 
-The hosted instance above is the default path for agents. Self-host only if you
-need your own domain, private auth, different limits, or isolated Redis storage.
+The hosted instance is the normal path. Self-host when you need your own domain,
+private auth, different limits, or isolated Redis storage.
 
 ```bash
 cp .env.example .env
 docker compose up -d --build
 ```
 
-Check `http://127.0.0.1:18173/health`. Survey pages open at `/s/{survey_id}`.
-The MCP endpoint is mounted at `/mcp/`. Redis runs inside Compose and keeps no
-disk persistence because surveys are intentionally short-lived.
+Check:
 
-For local development without Docker:
+```bash
+curl http://127.0.0.1:18173/health
+```
+
+Survey pages open at `/s/{survey_id}`. The MCP endpoint is `/mcp/`. Redis runs
+inside Compose without disk persistence because these surveys are conversation
+artifacts, not a family archive.
+
+Local development without Docker:
 
 ```bash
 uv sync --extra dev
 REDIS_URL=redis://localhost:6379/0 uv run mcp-surveys
 ```
 
-## Environment
+## Knobs
 
-| Variable | Default | Purpose |
+| Variable | Default | Why you care |
 | --- | --- | --- |
-| `REDIS_URL` | `redis://redis:6379/0` | Redis connection string |
-| `PUBLIC_BASE_URL` | `https://mcp.voevoda-sailing.ru` | Base URL used in links returned to agents |
+| `REDIS_URL` | `redis://redis:6379/0` | Where the short-lived state lives |
+| `PUBLIC_BASE_URL` | `https://mcp.voevoda-sailing.ru` | Base URL returned to agents |
 | `MCP_AUTH_TOKEN` | empty | Optional bearer token for private `/mcp/` deployments |
-| `SURVEY_LINK_TTL_SECONDS` | `3600` | Active survey lifetime before completion |
+| `SURVEY_LINK_TTL_SECONDS` | `3600` | Active survey lifetime |
 | `SURVEY_COMPLETED_TTL_SECONDS` | `10800` | Result lifetime after completion |
-| `REDIS_KEY_PREFIX` | `mcp-surveys` | Redis key prefix |
-| `CREATE_SURVEY_RATE_LIMIT_PER_HOUR` | `60` | Max surveys created per client IP per hour |
-| `MAX_CREATE_SURVEY_BYTES` | `131072` | Max serialized create-survey payload size |
+| `REDIS_KEY_PREFIX` | `mcp-surveys` | Redis key namespace |
+| `CREATE_SURVEY_RATE_LIMIT_PER_HOUR` | `60` | Created surveys per client IP per hour |
+| `MAX_CREATE_SURVEY_BYTES` | `131072` | Max serialized create payload |
 
-Leave `MCP_AUTH_TOKEN` empty for a public/shareable MCP server. Set it only for
+Leave `MCP_AUTH_TOKEN` empty for a public, shareable MCP server. Set it only for
 a private deployment where every MCP client can send
 `Authorization: Bearer <token>`.
 
-When running behind Caddy, keep the app bound to localhost so
-`X-Forwarded-For` is only accepted from your own proxy.
+When running behind Caddy, bind the app to localhost so `X-Forwarded-For` only
+comes from your proxy.
 
-## Deploy Behind Caddy
+## Caddy Shape
 
 ```caddyfile
 mcp.voevoda-sailing.ru {
@@ -298,18 +311,22 @@ mcp.voevoda-sailing.ru {
 }
 ```
 
-Set `PUBLIC_BASE_URL=https://mcp.voevoda-sailing.ru`.
+Set:
 
-## Project Shape
+```bash
+PUBLIC_BASE_URL=https://mcp.voevoda-sailing.ru
+```
 
-- FastAPI serves the browser UI and JSON API.
-- FastMCP exposes agent tools from the same process.
-- Redis stores survey specs and answers with TTLs.
-- Docker Compose runs the app and Redis.
-- Caddy terminates TLS and proxies the public domain.
+## What Is Inside
 
-## Roadmap
+- FastAPI serves the human UI and JSON API.
+- FastMCP exposes the agent tools.
+- Redis stores specs and answers with TTLs.
+- Docker Compose runs app plus Redis.
+- Caddy handles TLS and the public domain.
 
-The next layer is a `uvx` installable CLI that calls the same HTTP API and ships
-with an agent skill. It should stay thin: create surveys, read results, and
-avoid occupying MCP context.
+## Later
+
+A thin `uvx` CLI can call the same HTTP API and ship with an agent skill. That
+would be useful when MCP context is too expensive for "please ask my human to
+choose a thing".
