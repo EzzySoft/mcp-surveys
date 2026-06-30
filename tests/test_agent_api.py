@@ -78,8 +78,10 @@ def test_agent_api_create_and_read_answers():
     assert answers["answers"][0]["answer"] == {"id": "ramen", "text": "Ramen"}
 
     stats = client.get("/api/agent/stats", headers=AGENT_HEADERS).json()
+    public_metrics = client.get("/api/metrics").json()
 
     assert stats["created"] == 1
+    assert public_metrics["created"] == 1
     assert stats["answers_saved"] == 1
     assert stats["agent_requests"] == 3
     assert stats["public_views"] == 0

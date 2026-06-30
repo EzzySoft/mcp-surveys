@@ -137,6 +137,10 @@ def api_router(service: SurveyService) -> APIRouter:
         await _require_current_agent(service, request, "stats")
         return await service.get_stats()
 
+    @router.get("/metrics")
+    async def get_public_metrics():
+        return await service.get_stats()
+
     @router.get("/surveys/{survey_id}")
     async def get_survey(survey_id: str, request: Request):
         return await service.get_public_survey(survey_id, client_info=_public_client_info(request))

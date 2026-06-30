@@ -114,7 +114,7 @@ This makes stale local tools fail loudly instead of silently creating readable/p
 
 ## Observability
 
-The hosted service records anonymous operational counters only:
+The hosted service records anonymous operational counters only, available at `GET /api/metrics` (browser-friendly) and through the current CLI `stats` command:
 
 - event: `created`, `answers_saved`, `completed`, `public_views`, `agent_requests`, `upgrade_required`, rate-limit hits;
 - endpoint: `create`, `summary`, `answers`, `export`, `schema`, `stats`, or `mcp` for legacy calls;
