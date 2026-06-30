@@ -109,6 +109,46 @@ async def test_scale_question_accepts_number_in_range():
 
 
 @pytest.mark.asyncio
+async def test_color_choice_returns_selected_color():
+    service = SurveyService(MemoryStore(), "https://survey.test", 3600, 10800)
+    created = await service.create_survey(
+        CreateSurveyRequest(
+            title="Accent",
+            questions=[
+                Question(
+                    id="accent-color",
+                    type="color_choice",
+                    prompt="Which accent color should we use?",
+                    options=[
+                        Option(id="ocean", text="Ocean blue", color="#2563eb"),
+                        Option(id="forest", text="Forest green", color="#16a34a"),
+                    ],
+                )
+            ],
+        ),
+        client_key="127.0.0.1",
+    )
+
+    await service.save_answer(created.survey_id, "accent-color", AnswerIn(value="forest"))
+    answers = await service.get_answers(created.survey_id, created.result_token)
+
+    assert answers.answers[0].answer == {"id": "forest", "text": "Forest green", "color": "#16a34a"}
+
+
+def test_color_choice_requires_hex_colors():
+    with pytest.raises(ValidationError, match="color must be a #RRGGBB hex color"):
+        Question(
+            id="accent-color",
+            type="color_choice",
+            prompt="Which accent color should we use?",
+            options=[
+                Option(id="ocean", text="Ocean blue", color="blue"),
+                Option(id="forest", text="Forest green", color="#16a34a"),
+            ],
+        )
+
+
+@pytest.mark.asyncio
 async def test_binary_tradeoff_returns_lean_metadata():
     service = SurveyService(MemoryStore(), "https://survey.test", 3600, 10800)
     created = await service.create_survey(

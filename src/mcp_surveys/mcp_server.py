@@ -29,8 +29,9 @@ def build_mcp(service: SurveyService) -> FastMCP:
         "mcp-surveys",
         instructions=(
             "Create short-lived, tappable surveys for humans when plain chat would be clumsy. "
-            "Prefer single_choice, multiple_choice, ranking, matching, scale, or binary_tradeoff. "
+            "Prefer single_choice, multiple_choice, ranking, matching, scale, color_choice, or binary_tradeoff. "
             "Use scale for confidence, intensity, risk, fit, or other degree answers. Use "
+            "color_choice when the human should choose one labeled color swatch. Use "
             "binary_tradeoff when two competing theses are both valid and the human should place "
             "a marker between A and B. Use text only when the answer cannot be represented by the "
             "other question types. Public links expire; never expose result_token to the respondent."

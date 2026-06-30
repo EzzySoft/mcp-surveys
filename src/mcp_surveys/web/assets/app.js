@@ -14,6 +14,7 @@ function questionTypeLabel(type) {
     ranking: "Rank",
     matching: "Match",
     scale: "Scale",
+    color_choice: "Color",
     binary_tradeoff: "Tradeoff",
     text: "Short answer",
   };
@@ -98,7 +99,7 @@ function optionButton(question, option, selected, onClick) {
 }
 
 function renderCustom(question, wrapper, currentCustom = {}) {
-  if (!question.allow_custom || ["matching", "scale", "binary_tradeoff", "text"].includes(question.type)) return;
+  if (!question.allow_custom || ["matching", "scale", "color_choice", "binary_tradeoff", "text"].includes(question.type)) return;
 
   const row = document.createElement("div");
   row.className = "custom-row";
@@ -154,6 +155,44 @@ function renderChoice(question, multi) {
   }
 
   renderCustom(question, wrapper, custom);
+  return wrapper;
+}
+
+function isHexColor(value) {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function renderColorChoice(question) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "color-choices";
+  const selected = currentAnswer(question)?.value;
+
+  for (const option of question.options) {
+    const color = isHexColor(option.color) ? option.color : "#ded7d1";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `color-choice${selected === option.id ? " is-selected" : ""}`;
+    button.style.setProperty("--color-choice", color);
+    button.setAttribute("aria-pressed", selected === option.id ? "true" : "false");
+
+    const swatch = document.createElement("span");
+    swatch.className = "color-swatch";
+    swatch.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.className = "color-label";
+    label.textContent = option.text;
+    const value = document.createElement("span");
+    value.className = "color-value";
+    value.textContent = color.toUpperCase();
+    button.append(swatch, label, value);
+
+    button.addEventListener("click", () => {
+      save(question, option.id);
+      renderQuestion(question);
+    });
+    wrapper.append(button);
+  }
+
   return wrapper;
 }
 
@@ -486,6 +525,7 @@ function renderQuestion(question) {
   if (question.type === "ranking") section.append(renderRanking(question));
   if (question.type === "matching") section.append(renderMatching(question));
   if (question.type === "scale") section.append(renderScale(question));
+  if (question.type === "color_choice") section.append(renderColorChoice(question));
   if (question.type === "binary_tradeoff") section.append(renderBinaryTradeoff(question));
   if (question.type === "text") section.append(renderText(question));
 

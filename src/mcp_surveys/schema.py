@@ -10,6 +10,10 @@ def question_schema() -> dict[str, Any]:
         "ranking": {"value": ["first_option_id", "second_option_id"]},
         "matching": {"left_item_id": "right_item_id"},
         "scale": {"value": 75, "fields": {"min": 0, "max": 100, "step": 5, "min_label": "Guess", "max_label": "Certain"}},
+        "color_choice": {
+            "value": "option_id",
+            "fields": {"options": [{"id": "blue", "text": "Ocean blue", "color": "#2563eb"}]},
+        },
         "binary_tradeoff": {
             "value": 35,
             "fields": {

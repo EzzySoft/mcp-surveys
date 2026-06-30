@@ -166,6 +166,7 @@ h1 {
 .ranking,
 .matching,
 .scale-answer,
+.color-choices,
 .binary-tradeoff,
 .text-answer {
   display: grid;
@@ -202,6 +203,7 @@ h1 {
 .secondary:focus-visible,
 .small:focus-visible,
 .primary:focus-visible,
+.color-choice:focus-visible,
 .tradeoff-quick-picks button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
@@ -275,6 +277,68 @@ select:focus-visible {
 
 .choice.is-selected.choice--multiple .mark::before {
   transform: rotate(-45deg) scale(1);
+}
+
+.color-choices {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.color-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 88px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), transparent),
+    var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.color-choice:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.color-choice.is-selected {
+  border-color: var(--color-choice);
+  box-shadow: inset 0 0 0 2px var(--color-choice);
+}
+
+.color-swatch {
+  grid-row: span 2;
+  width: 54px;
+  height: 54px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--color-choice);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 8px 18px rgba(36, 27, 39, 0.16);
+}
+
+.color-label {
+  align-self: end;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+.color-value {
+  align-self: start;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
 }
 
 .custom-row {
@@ -898,6 +962,7 @@ body[data-completed="true"] .primary:disabled {
   .ranking,
   .matching,
   .scale-answer,
+  .color-choices,
   .binary-tradeoff,
   .text-answer {
     padding-right: 18px;

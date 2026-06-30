@@ -16,7 +16,16 @@ from mcp_surveys.limits import (
 )
 
 
-QuestionType = Literal["single_choice", "multiple_choice", "ranking", "matching", "scale", "binary_tradeoff", "text"]
+QuestionType = Literal[
+    "single_choice",
+    "multiple_choice",
+    "ranking",
+    "matching",
+    "scale",
+    "color_choice",
+    "binary_tradeoff",
+    "text",
+]
 ExportFormat = Literal["json", "markdown"]
 _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -28,6 +37,13 @@ class ApiModel(BaseModel):
 class Option(ApiModel):
     id: str | None = Field(default=None, description="Stable option id. Generated when omitted.")
     text: str = Field(min_length=1, max_length=MAX_OPTION_CHARS)
+    color: str | None = Field(default=None, max_length=7, description="Optional #RRGGBB color for color_choice options.")
+
+    @model_validator(mode="after")
+    def validate_color(self) -> "Option":
+        if self.color and not _COLOR_RE.fullmatch(self.color):
+            raise ValueError("color must be a #RRGGBB hex color")
+        return self
 
 
 class Question(ApiModel):
@@ -50,10 +66,15 @@ class Question(ApiModel):
 
     @model_validator(mode="after")
     def validate_shape(self) -> "Question":
-        if self.type in {"single_choice", "multiple_choice", "ranking"} and len(self.options) < 2:
+        if self.type in {"single_choice", "multiple_choice", "ranking", "color_choice"} and len(self.options) < 2:
             raise ValueError(f"{self.type} requires at least two options")
         if self.type == "matching" and (not self.left or not self.right):
             raise ValueError("matching requires left and right items")
+        if self.type == "color_choice":
+            if self.left or self.right:
+                raise ValueError("color_choice questions cannot have left or right items")
+            if any(not option.color for option in self.options):
+                raise ValueError("color_choice options require color")
         if self.type == "binary_tradeoff" and (len(self.left) != 1 or len(self.right) != 1):
             raise ValueError("binary_tradeoff requires exactly one left and one right thesis")
         if self.type in {"scale", "text"} and (self.options or self.left or self.right):

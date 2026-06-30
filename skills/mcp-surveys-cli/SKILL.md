@@ -23,4 +23,4 @@ uvx mcp-surveys-cli answers <survey_id> <result_token>
 
 Use `MCP_SURVEYS_BASE_URL` or `--base-url` for another instance.
 
-Prefer structured buttons, ranking, matching, scale, and `binary_tradeoff`; use `text` only when the answer cannot fit those shapes.
+Prefer structured buttons, ranking, matching, scale, `color_choice`, and `binary_tradeoff`; use `text` only when the answer cannot fit those shapes.

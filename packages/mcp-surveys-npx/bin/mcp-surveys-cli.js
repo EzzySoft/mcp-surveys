@@ -34,7 +34,7 @@ uvx mcp-surveys-cli answers <survey_id> <result_token>
 
 Use \`MCP_SURVEYS_BASE_URL\` or \`--base-url\` for another instance.
 
-Prefer structured buttons, ranking, matching, scale, and \`binary_tradeoff\`; use \`text\` only when the answer cannot fit those shapes.
+Prefer structured buttons, ranking, matching, scale, \`color_choice\`, and \`binary_tradeoff\`; use \`text\` only when the answer cannot fit those shapes.
 `;
 const TEMPLATES = {
   decision: {
@@ -97,6 +97,23 @@ const TEMPLATES = {
       },
     ],
   },
+  palette: {
+    title: "Palette pick",
+    description: "Choose one labeled color swatch. Link expires in one hour.",
+    questions: [
+      {
+        id: "accent-color",
+        type: "color_choice",
+        prompt: "Which accent color should we use?",
+        required: true,
+        options: [
+          { id: "ocean", text: "Ocean blue", color: "#2563eb" },
+          { id: "forest", text: "Forest green", color: "#16a34a" },
+          { id: "sunset", text: "Sunset orange", color: "#f97316" },
+        ],
+      },
+    ],
+  },
 };
 
 function usage() {
@@ -111,7 +128,7 @@ Commands:
   question <survey_id> <result_token> <question_id>
   export <survey_id> <result_token> [--format markdown|json]
   wait <survey_id> <result_token> [--timeout seconds] [--interval seconds] [--format markdown|json]
-  template <decision|confidence|prioritization>
+  template <decision|confidence|palette|prioritization>
   install-skill [--target agents|claude|both] [--force]
   stats
   schema`;
