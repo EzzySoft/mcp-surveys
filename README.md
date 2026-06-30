@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/mcp-surveys-cli/"><img alt="PyPI" src="https://img.shields.io/pypi/v/mcp-surveys-cli?label=uvx"></a>
+  <a href="https://pypi.org/project/mcp-surveys-cli/"><img alt="PyPI" src="https://img.shields.io/pypi/v/mcp-surveys-cli?label=uvx&style=flat"></a>
   <a href="https://www.npmjs.com/package/mcp-surveys-cli"><img alt="npm" src="https://img.shields.io/npm/v/mcp-surveys-cli?label=npx"></a>
   <a href="https://github.com/EzzySoft/mcp-surveys/releases"><img alt="release" src="https://img.shields.io/github/v/release/EzzySoft/mcp-surveys?filter=cli-v*"></a>
   <a href="https://mcp.voevoda-sailing.ru/health"><img alt="hosted" src="https://img.shields.io/badge/hosted-online-16a34a"></a>
