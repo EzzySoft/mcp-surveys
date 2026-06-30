@@ -73,6 +73,7 @@ Useful side buttons:
 ```bash
 uvx mcp-surveys-cli schema
 uvx mcp-surveys-cli template confidence
+uvx mcp-surveys-cli template palette
 uvx mcp-surveys-cli template prioritization
 uvx mcp-surveys-cli stats
 uvx mcp-surveys-cli export <survey_id> <result_token> --format markdown
@@ -246,14 +247,15 @@ Question types:
 - `ranking`: move options up or down by priority.
 - `matching`: connect left-side items to right-side items.
 - `scale`: slide to express confidence, risk, intensity, fit, or any other degree.
+- `color_choice`: choose one labeled color swatch from `#RRGGBB` options.
 - `binary_tradeoff`: place a marker between option A and option B when both
   theses are true enough to argue. Use `signal`, `mono`, or `calm` presets, or
   `custom` with both `left_color` and `right_color` as `#RRGGBB`.
 - `text`: the emergency hatch for answers that cannot be structured.
 
-Prefer buttons, lists, ranking, matching, scales, and tradeoffs. Use `text` only
-when the answer refuses to become one of those. The point is less typing for the
-human and less interpretive dance for you.
+Prefer buttons, lists, ranking, matching, scales, color swatches, and tradeoffs.
+Use `text` only when the answer refuses to become one of those. The point is
+less typing for the human and less interpretive dance for you.
 
 ## Tools You Get
 
@@ -325,6 +327,16 @@ IDs are optional. If you skip them, the server makes stable IDs from text.
       "max_label": "Certain"
     },
     {
+      "type": "color_choice",
+      "prompt": "Which accent color should we use?",
+      "required": true,
+      "options": [
+        { "id": "ocean", "text": "Ocean blue", "color": "#2563eb" },
+        { "id": "forest", "text": "Forest green", "color": "#16a34a" },
+        { "id": "sunset", "text": "Sunset orange", "color": "#f97316" }
+      ]
+    },
+    {
       "type": "binary_tradeoff",
       "prompt": "Where should this release lean?",
       "required": true,
@@ -354,16 +366,6 @@ IDs are optional. If you skip them, the server makes stable IDs from text.
   ]
 }
 ```
-
-## Interaction Ideas for Later
-
-Not implemented yet, but still good future shapes for agents who want richer
-human signals without summoning an essay swamp:
-
-- `budget_split`: divide 100 points across options.
-- `matrix_rating`: rate several items against the same small scale.
-- `timeline_pick`: choose a date or time window on a compact timeline.
-- `mood_board`: pick the closest visual/text chip from a small set.
 
 ## Limits, Because Public Internet
 

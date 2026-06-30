@@ -237,6 +237,8 @@ class SurveyService:
         custom_options = self._validated_custom_options(question, answer.custom_options)
         if question.type == "single_choice":
             self._validate_choice_value(answer.value, self._option_ids(question) | custom_options, "single_choice")
+        elif question.type == "color_choice":
+            self._validate_choice_value(answer.value, self._option_ids(question), "color_choice")
         elif question.type == "multiple_choice":
             self._validate_list_value(answer.value, self._option_ids(question) | custom_options, "multiple_choice")
         elif question.type == "ranking":
@@ -372,11 +374,14 @@ class SurveyService:
 
     def _resolve_answer(self, question: Question, answer: StoredAnswer) -> Any:
         labels = {option.id: option.text for option in question.options}
+        colors = {option.id: option.color for option in question.options if option.color}
         labels.update({item.id: item.text for item in question.left})
         labels.update({item.id: item.text for item in question.right})
         labels.update(answer.custom_options)
         if question.type == "single_choice":
             return {"id": answer.value, "text": labels.get(answer.value, answer.value)}
+        if question.type == "color_choice":
+            return {"id": answer.value, "text": labels.get(answer.value, answer.value), "color": colors.get(answer.value)}
         if question.type in {"multiple_choice", "ranking"}:
             return [{"id": item, "text": labels.get(item, item)} for item in answer.value]
         if question.type == "matching":

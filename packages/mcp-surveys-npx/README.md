@@ -5,6 +5,7 @@ Tiny dependency-free CLI for the hosted mcp-surveys API.
 ```bash
 npx mcp-surveys-cli install-skill
 npx mcp-surveys-cli template decision > survey.json
+npx mcp-surveys-cli template palette
 npx mcp-surveys-cli schema
 npx mcp-surveys-cli create survey.json
 npx mcp-surveys-cli wait <survey_id> <result_token> --format markdown

@@ -41,7 +41,7 @@ uvx mcp-surveys-cli answers <survey_id> <result_token>
 
 Use `MCP_SURVEYS_BASE_URL` or `--base-url` for another instance.
 
-Prefer structured buttons, ranking, matching, scale, and `binary_tradeoff`; use `text` only when the answer cannot fit those shapes.
+Prefer structured buttons, ranking, matching, scale, `color_choice`, and `binary_tradeoff`; use `text` only when the answer cannot fit those shapes.
 """
 TEMPLATES: dict[str, dict[str, Any]] = {
     "decision": {
@@ -100,6 +100,23 @@ TEMPLATES: dict[str, dict[str, Any]] = {
                     {"id": "speed", "text": "Move fast"},
                     {"id": "risk", "text": "Reduce risk"},
                     {"id": "quality", "text": "Improve quality"},
+                ],
+            }
+        ],
+    },
+    "palette": {
+        "title": "Palette pick",
+        "description": "Choose one labeled color swatch. Link expires in one hour.",
+        "questions": [
+            {
+                "id": "accent-color",
+                "type": "color_choice",
+                "prompt": "Which accent color should we use?",
+                "required": True,
+                "options": [
+                    {"id": "ocean", "text": "Ocean blue", "color": "#2563eb"},
+                    {"id": "forest", "text": "Forest green", "color": "#16a34a"},
+                    {"id": "sunset", "text": "Sunset orange", "color": "#f97316"},
                 ],
             }
         ],

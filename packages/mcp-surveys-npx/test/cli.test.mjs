@@ -52,6 +52,19 @@ test("template prints a payload", async () => {
   assert.equal(JSON.parse(out.join("")).title, "Decision capture");
 });
 
+test("palette template prints a color_choice payload", async () => {
+  const out = [];
+  const code = await run(["template", "palette"], {
+    write: (value) => out.push(value),
+    error: () => {},
+  });
+
+  const payload = JSON.parse(out.join(""));
+  assert.equal(code, 0);
+  assert.equal(payload.questions[0].type, "color_choice");
+  assert.equal(payload.questions[0].options[0].color, "#2563eb");
+});
+
 test("wait exports once completed", async () => {
   const calls = [];
   const out = [];

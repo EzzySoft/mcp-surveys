@@ -59,6 +59,15 @@ def test_cli_template_prints_payload(capsys):
     assert payload["questions"][0]["type"] == "single_choice"
 
 
+def test_cli_palette_template_prints_color_choice(capsys):
+    assert cli.main(["template", "palette"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["questions"][0]["type"] == "color_choice"
+    assert payload["questions"][0]["options"][0]["color"] == "#2563eb"
+
+
 def test_cli_wait_exports_when_completed(monkeypatch, capsys):
     calls = []
 
