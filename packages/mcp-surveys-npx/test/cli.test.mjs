@@ -11,7 +11,7 @@ process.env.MCP_SURVEYS_SKIP_VERSION_CHECK = "1";
 test("create posts a JSON payload", async () => {
   const calls = [];
   const out = [];
-  const code = await run(["--base-url", "https://survey.test", "create", "-"], {
+  const code = await run(["--base-url", "https://survey.test", "create", "-", "--mode", "plaintext"], {
     stdin: '{"title":"Lunch","questions":[]}',
     write: (value) => out.push(value),
     error: () => {},
@@ -23,8 +23,22 @@ test("create posts a JSON payload", async () => {
 
   assert.equal(code, 0);
   assert.deepEqual(JSON.parse(out.join("")), { survey_id: "s1" });
-  assert.deepEqual(calls, [["POST", "https://survey.test/api/agent/surveys", { title: "Lunch", questions: [] }, undefined]]);
+  assert.deepEqual(calls, [["POST", "https://survey.test/api/agent/surveys", { title: "Lunch", questions: [] }, false]]);
 });
+
+test("secure create in npx fails closed", async () => {
+  const err = [];
+  const code = await run(["--base-url", "https://survey.test", "create", "-"], {
+    stdin: '{"title":"Lunch","questions":[]}',
+    write: () => {},
+    error: (value) => err.push(value),
+  });
+
+  assert.equal(code, 1);
+  assert.match(err.join(""), /secure E2EE create is the default/);
+  assert.match(err.join(""), /uvx mcp-surveys-cli create/);
+});
+
 
 test("request errors are printed", async () => {
   const err = [];
@@ -100,7 +114,7 @@ test("install-skill writes the skill", async () => {
 
     assert.equal(code, 0);
     assert.equal(installed, join(home, ".agents", "skills", "mcp-surveys-cli", "SKILL.md"));
-    assert.match(await readFile(installed, "utf8"), /uvx mcp-surveys-cli template decision/);
+    assert.match(await readFile(installed, "utf8"), /mcp-surveys-cli template decision/);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -119,7 +133,7 @@ test("warns when version is outdated", async () => {
 
     assert.equal(code, 0);
     assert.match(err.join(""), /mcp-surveys-cli 0\.2\.0 is outdated/);
-    assert.match(err.join(""), /LLM agent/);
+    assert.match(err.join(""), /E2EE secure surveys/);
   } finally {
     process.env.MCP_SURVEYS_SKIP_VERSION_CHECK = "1";
   }

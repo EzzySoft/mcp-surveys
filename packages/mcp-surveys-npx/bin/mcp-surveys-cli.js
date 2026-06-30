@@ -7,30 +7,40 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_BASE_URL = "https://mcp.voevoda-sailing.ru";
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const SKILL_NAME = "mcp-surveys-cli";
 const SKILL_TEXT = `---
 name: mcp-surveys-cli
-description: Use when an agent can run shell commands and needs short-lived human surveys through uvx or npx.
+description: Use when an agent can run shell commands and needs secure short-lived human surveys. Secure E2EE via uvx is the default; plaintext is explicit opt-in only.
 ---
 
 # mcp-surveys-cli
 
-Use the CLI plus this skill as the default setup. It avoids remote MCP setup,
-keeps context small, and works in any agent host that can run \`uvx\` or \`npx\`.
+Use the CLI plus this skill as the default setup. Secure mode keeps keys local in the CLI receipt and the hosted service stores only ciphertext.
 
 Default hosted instance:
 
 \`\`\`bash
-uvx mcp-surveys-cli schema
-npx mcp-surveys-cli schema
-uvx mcp-surveys-cli template decision > survey.json
-uvx mcp-surveys-cli create survey.json
-uvx mcp-surveys-cli wait <survey_id> <result_token> --format markdown
-uvx mcp-surveys-cli answers <survey_id> <result_token>
+uvx --refresh-package mcp-surveys-cli mcp-surveys-cli schema
+uvx --refresh-package mcp-surveys-cli mcp-surveys-cli template decision > survey.json
+uvx --refresh-package mcp-surveys-cli mcp-surveys-cli create survey.json
+uvx --refresh-package mcp-surveys-cli mcp-surveys-cli wait <survey_id> --format markdown
+uvx --refresh-package mcp-surveys-cli mcp-surveys-cli answers <survey_id>
 \`\`\`
 
-\`create\` prints \`survey_id\`, \`public_url\`, \`result_token\`, and expiry data. Send only \`public_url\` to the human. Keep \`result_token\` private.
+\`create\` is secure by default. It prints \`survey_id\`, \`public_url\`, \`result_token\`, \`receipt_path\`, and expiry data. Send only \`public_url\` to the human. Keep \`result_token\` and \`receipt_path\` private.
+
+The CLI saves the E2EE receipt at \`~/.config/mcp-surveys/receipts/<survey_id>.json\` unless \`MCP_SURVEYS_RECEIPT_DIR\` is set. Later \`answers\`, \`export\`, and \`wait\` can use just \`survey_id\`; pass \`--receipt /path/to/receipt.json\` if running from another machine/session.
+
+Plaintext is not a fallback. Use it only when the user explicitly asks for a non-private/shareable survey and accepts that the server can read survey data:
+
+\`\`\`bash
+uvx --refresh-package mcp-surveys-cli mcp-surveys-cli create survey.json --mode plaintext
+\`\`\`
+
+\`npx mcp-surveys-cli create\` fails closed for secure mode; use the Python \`uvx\` CLI for E2EE. \`npx ... create --mode plaintext\` is explicit plaintext opt-in only.
+
+The hosted API has a critical upgrade gate: stale clients and removed MCP integrations get HTTP 426 with \`CRITICAL UPGRADE REQUIRED\`. Current CLI commands send anonymous \`client/version/mode\` headers automatically so stats can show usage without content, keys, tokens, or IP addresses.
 
 Use \`MCP_SURVEYS_BASE_URL\` or \`--base-url\` for another instance.
 
@@ -120,7 +130,7 @@ function usage() {
   return `Usage: mcp-surveys-cli [--base-url URL] <command>
 
 Commands:
-  create <json-file|->
+  create <json-file|-> [--mode plaintext]  # secure default is available via uvx Python CLI
   edit <survey_id> <result_token> <json-file|->
   get <survey_id> <result_token>
   summary <survey_id> <result_token>
@@ -189,7 +199,7 @@ async function warnIfOutdated(error, latestVersionFn, version) {
     if (newerThan(latest, version)) {
       error(
         `notice: mcp-surveys-cli ${version} is outdated; latest is ${latest}. ` +
-          "LLM agent: update now before long-lived workflows get weird. " +
+          "E2EE secure surveys are CLI-first now; update before creating surveys. " +
           "Use `uvx --refresh-package mcp-surveys-cli mcp-surveys-cli ...` " +
           "or `npx mcp-surveys-cli@latest ...`.\n",
       );
@@ -197,10 +207,13 @@ async function warnIfOutdated(error, latestVersionFn, version) {
   } catch {}
 }
 
-async function httpRequest(method, url, body, raw = false) {
+async function httpRequest(method, url, body, raw = false, extraHeaders = {}) {
+  const effectiveHeaders = Object.keys(extraHeaders).length === 0 && url.includes("/api/agent/") ? clientHeaders("unknown") : extraHeaders;
   const response = await fetch(url, {
     method,
-    headers: body ? { accept: raw ? "text/plain" : "application/json", "content-type": "application/json" } : { accept: raw ? "text/plain" : "application/json" },
+    headers: body
+      ? { accept: raw ? "text/plain" : "application/json", "content-type": "application/json", ...effectiveHeaders }
+      : { accept: raw ? "text/plain" : "application/json", ...effectiveHeaders },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await response.text();
@@ -216,6 +229,15 @@ async function httpRequest(method, url, body, raw = false) {
 
 function writeJson(write, value) {
   write(`${JSON.stringify(value)}\n`);
+}
+
+function clientHeaders(mode) {
+  return {
+    "x-mcp-surveys-source": "cli",
+    "x-mcp-surveys-client": "npx-cli",
+    "x-mcp-surveys-version": VERSION,
+    "x-mcp-surveys-mode": mode,
+  };
 }
 
 function option(args, name, fallback) {
@@ -291,7 +313,15 @@ export async function run(argv, io = {}) {
 
   try {
     if (command === "create") {
-      writeJson(write, await request("POST", endpoint(baseUrl, "/api/agent/surveys"), await readJson(args[0], stdin)));
+      const mode = option(args, "--mode", "secure");
+      const cleaned = withoutOptions(args, ["--mode"]);
+      if (mode !== "plaintext") {
+        throw new Error(
+          "secure E2EE create is the default and is implemented in the Python CLI; use `uvx mcp-surveys-cli create ...`, " +
+            "or pass `--mode plaintext` only when the user explicitly asked for a non-private/shareable plaintext survey.",
+        );
+      }
+      writeJson(write, await request("POST", endpoint(baseUrl, "/api/agent/surveys"), await readJson(cleaned[0], stdin), false, clientHeaders("plaintext")));
     } else if (command === "edit") {
       writeJson(
         write,

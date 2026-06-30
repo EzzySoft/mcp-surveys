@@ -23,7 +23,6 @@ class Settings:
     survey_link_ttl_seconds: int
     survey_completed_ttl_seconds: int
     redis_key_prefix: str
-    mcp_auth_token: str | None
     create_survey_rate_limit_per_hour: int
     max_create_survey_bytes: int
 
@@ -35,7 +34,6 @@ def load_settings() -> Settings:
         survey_link_ttl_seconds=_int_env("SURVEY_LINK_TTL_SECONDS", 3600),
         survey_completed_ttl_seconds=_int_env("SURVEY_COMPLETED_TTL_SECONDS", 10800),
         redis_key_prefix=os.getenv("REDIS_KEY_PREFIX", "mcp-surveys"),
-        mcp_auth_token=os.getenv("MCP_AUTH_TOKEN") or None,
         create_survey_rate_limit_per_hour=_int_env("CREATE_SURVEY_RATE_LIMIT_PER_HOUR", 60),
         max_create_survey_bytes=_int_env("MAX_CREATE_SURVEY_BYTES", 128 * 1024),
     )

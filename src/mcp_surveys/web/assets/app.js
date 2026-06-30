@@ -37,14 +37,86 @@ function showEmpty() {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { "content-type": "application/json" },
-    ...options,
-  });
+  const headers = {
+    "content-type": "application/json",
+    "x-mcp-surveys-source": "web",
+    "x-mcp-surveys-client": "web",
+    "x-mcp-surveys-version": "0.4.0",
+    ...(options.headers || {}),
+  };
+  const response = await fetch(path, { ...options, headers });
   if (!response.ok) {
     throw new Error(await response.text());
   }
   return response.json();
+}
+
+function base64UrlToBytes(value) {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (value.length % 4)) % 4);
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function bytesToBase64Url(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function hashParam(name) {
+  const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+  return params.get(name);
+}
+
+function isSecureSurvey() {
+  return state.survey?.crypto?.mode === "e2ee_full";
+}
+
+async function decryptSecureSurvey() {
+  const keyText = hashParam("k") || hashParam("key");
+  if (!keyText) throw new Error("missing secure survey key");
+  const key = await crypto.subtle.importKey("raw", base64UrlToBytes(keyText), "AES-GCM", false, ["decrypt"]);
+  const spec = state.survey.crypto.spec;
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: base64UrlToBytes(spec.nonce) },
+    key,
+    base64UrlToBytes(spec.ciphertext),
+  );
+  const decoded = JSON.parse(new TextDecoder().decode(plaintext));
+  state.survey.title = decoded.title;
+  state.survey.description = decoded.description || "";
+  state.survey.questions = decoded.questions || [];
+}
+
+async function encryptSecureAnswer(question, value, customOptions = {}) {
+  const answerKey = crypto.getRandomValues(new Uint8Array(32));
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const aesKey = await crypto.subtle.importKey("raw", answerKey, "AES-GCM", false, ["encrypt"]);
+  const plaintext = new TextEncoder().encode(JSON.stringify({
+    question_id: question.id,
+    revision: state.survey.crypto.revision,
+    value,
+    custom_options: customOptions,
+  }));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, plaintext);
+  const publicKey = await crypto.subtle.importKey(
+    "spki",
+    base64UrlToBytes(state.survey.crypto.answer_public_key_spki),
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    false,
+    ["encrypt"],
+  );
+  const encryptedKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, answerKey);
+  return {
+    marker: "__mcp_surveys_encrypted_answer_v1__",
+    v: 1,
+    alg: "RSA-OAEP-256+A256GCM",
+    question_id: question.id,
+    revision: state.survey.crypto.revision,
+    encrypted_key: bytesToBase64Url(new Uint8Array(encryptedKey)),
+    nonce: bytesToBase64Url(nonce),
+    ciphertext: bytesToBase64Url(new Uint8Array(ciphertext)),
+  };
 }
 
 function currentAnswer(question) {
@@ -56,10 +128,17 @@ async function save(question, value, customOptions = {}) {
   renderProgress();
   setStatus("Saving");
   try {
+    const decrypted = isSecureSurvey()
+      ? { title: state.survey.title, description: state.survey.description, questions: state.survey.questions }
+      : null;
+    const body = isSecureSurvey()
+      ? { value: await encryptSecureAnswer(question, value, customOptions), custom_options: {} }
+      : { value, custom_options: customOptions };
     state.survey = await api(`${basePath}/api/surveys/${surveyId}/answers/${question.id}`, {
       method: "PUT",
-      body: JSON.stringify({ value, custom_options: customOptions }),
+      body: JSON.stringify(body),
     });
+    if (decrypted) Object.assign(state.survey, decrypted);
     setStatus("Saved");
     renderProgress();
   } catch {
@@ -536,7 +615,7 @@ function renderSurvey() {
   $("title").textContent = state.survey.title;
   $("description").textContent = state.survey.description || "";
   setExpiry(state.survey.expires_at);
-  state.answers = new Map(Object.entries(state.survey.answers || {}));
+  state.answers = isSecureSurvey() ? new Map() : new Map(Object.entries(state.survey.answers || {}));
   $("questions").innerHTML = "";
   for (const question of state.survey.questions) renderQuestion(question);
   renderProgress();
@@ -559,6 +638,7 @@ async function complete() {
 async function boot() {
   try {
     state.survey = await api(`${basePath}/api/surveys/${surveyId}`);
+    if (isSecureSurvey()) await decryptSecureSurvey();
     if (state.survey.completed_at) {
       $("complete").disabled = true;
       $("complete").textContent = "Submitted";

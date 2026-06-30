@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Awaitable, Callable
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from mcp_surveys.api import api_router, http_error
 from mcp_surveys.config import WEB_DIR, load_settings
 from mcp_surveys.errors import SurveyError
-from mcp_surveys.mcp_server import build_mcp
 from mcp_surveys.rate_limit import RedisRateLimiter
 from mcp_surveys.service import SurveyService
 from mcp_surveys.storage import RedisSurveyStore
@@ -50,12 +48,6 @@ class MaxBodySizeMiddleware:
             await response(scope, receive, send)
 
 
-def _authorized(request: Request, token: str | None) -> bool:
-    if token is None:
-        return True
-    return request.headers.get("authorization") == f"Bearer {token}"
-
-
 def create_app() -> FastAPI:
     settings = load_settings()
     store = RedisSurveyStore(settings.redis_url, settings.redis_key_prefix)
@@ -72,13 +64,10 @@ def create_app() -> FastAPI:
         rate_limiter=rate_limiter,
         max_create_survey_bytes=settings.max_create_survey_bytes,
     )
-    mcp = build_mcp(service)
-    mcp_app = mcp.http_app(path="/")
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        async with mcp_app.lifespan(_):
-            yield
+        yield
         await store.close()
         await rate_limiter.close()
 
@@ -87,14 +76,8 @@ def create_app() -> FastAPI:
     app.add_middleware(
         MaxBodySizeMiddleware,
         max_bytes=settings.max_create_survey_bytes + 8192,
-        protected_prefixes=("/mcp", "/api"),
+        protected_prefixes=("/api",),
     )
-
-    @app.middleware("http")
-    async def protect_mcp(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        if request.url.path.startswith("/mcp") and not _authorized(request, settings.mcp_auth_token):
-            return JSONResponse({"detail": "missing or invalid bearer token"}, status_code=401)
-        return await call_next(request)
 
     @app.exception_handler(SurveyError)
     async def survey_exception_handler(_: Request, error: SurveyError) -> JSONResponse:
@@ -102,7 +85,6 @@ def create_app() -> FastAPI:
         return JSONResponse({"detail": http.detail}, status_code=http.status_code)
 
     app.include_router(api_router(service))
-    app.mount("/mcp", mcp_app)
 
     @app.get("/", include_in_schema=False)
     async def root():
@@ -111,6 +93,23 @@ def create_app() -> FastAPI:
     @app.get("/health", include_in_schema=False)
     async def health():
         return {"ok": True}
+
+    @app.api_route("/mcp", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], include_in_schema=False)
+    @app.api_route("/mcp/{_:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], include_in_schema=False)
+    async def removed_mcp(_: str = ""):
+        try:
+            await service.record_event(
+                "upgrade_required",
+                {"source": "mcp", "client": "legacy-mcp", "version": "unknown", "mode": "plaintext", "endpoint": "mcp", "reason": "remote-mcp-removed"},
+            )
+        except Exception:
+            pass
+        return JSONResponse(
+            {
+                "detail": "CRITICAL UPGRADE REQUIRED: remote MCP was removed and this client is too old for secure surveys. Use `uvx --refresh-package mcp-surveys-cli mcp-surveys-cli ...` instead."
+            },
+            status_code=426,
+        )
 
     app.frontend("/", directory=str(WEB_DIR), fallback="index.html")
 

@@ -11,6 +11,7 @@ from mcp_surveys.limits import MAX_CUSTOM_OPTIONS, MAX_TEXT_ANSWER_CHARS
 from mcp_surveys.models import (
     AnswerIn,
     CreatedSurvey,
+    CreateEncryptedSurveyRequest,
     CreateSurveyRequest,
     ExportFormat,
     Option,
@@ -29,6 +30,8 @@ from mcp_surveys.storage import SurveyStore
 
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
+_STAT_LABEL_RE = re.compile(r"[^a-zA-Z0-9_.-]+")
+_ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v1__"
 
 
 def now_utc() -> datetime:
@@ -99,28 +102,53 @@ class SurveyService:
         self.rate_limiter = rate_limiter
         self.max_create_survey_bytes = max_create_survey_bytes
 
-    async def create_survey(self, request: CreateSurveyRequest, client_key: str = "unknown") -> CreatedSurvey:
+    async def create_survey(
+        self,
+        request: CreateSurveyRequest | CreateEncryptedSurveyRequest,
+        client_key: str = "unknown",
+        client_info: dict[str, str] | None = None,
+    ) -> CreatedSurvey:
         if len(request.model_dump_json().encode("utf-8")) > self.max_create_survey_bytes:
             raise SurveyValidationError(f"create_survey payload is larger than {self.max_create_survey_bytes} bytes")
         if self.rate_limiter is not None:
             try:
                 await self.rate_limiter.check_create_survey(client_key)
             except RateLimitExceeded:
-                await self.store.increment_stat("rate_limit_hits")
+                await self.record_event("rate_limit_hits", {"source": "agent", **(client_info or {})})
                 raise
         created_at = now_utc()
-        survey = Survey(
-            id=_token(),
-            result_token=_token(),
-            title=request.title,
-            description=request.description,
-            questions=normalize_questions(request.questions),
-            response=SurveyResponse(),
-            created_at=created_at,
-            expires_at=created_at + timedelta(seconds=self.link_ttl_seconds),
-        )
+        if isinstance(request, CreateEncryptedSurveyRequest):
+            survey = Survey(
+                id=_token(),
+                result_token=_token(),
+                title="Private encrypted survey",
+                description="End-to-end encrypted. Only the creating CLI receipt can decrypt the content.",
+                questions=[],
+                crypto=request.crypto,
+                response=SurveyResponse(),
+                created_at=created_at,
+                expires_at=created_at + timedelta(seconds=self.link_ttl_seconds),
+            )
+        else:
+            survey = Survey(
+                id=_token(),
+                result_token=_token(),
+                title=request.title,
+                description=request.description,
+                questions=normalize_questions(request.questions),
+                response=SurveyResponse(),
+                created_at=created_at,
+                expires_at=created_at + timedelta(seconds=self.link_ttl_seconds),
+            )
         await self.store.save(survey, self.link_ttl_seconds)
-        await self.store.increment_stat("created")
+        await self.record_event(
+            "created",
+            {
+                "source": "agent",
+                "mode": "e2ee_full" if survey.crypto is not None else "plaintext",
+                **(client_info or {}),
+            },
+        )
         return CreatedSurvey(
             survey_id=survey.id,
             public_url=f"{self.public_base_url}/s/{survey.id}",
@@ -129,38 +157,65 @@ class SurveyService:
             expires_in_seconds=self.link_ttl_seconds,
         )
 
-    async def get_public_survey(self, survey_id: str) -> PublicSurvey:
+    async def get_public_survey(self, survey_id: str, client_info: dict[str, str] | None = None) -> PublicSurvey:
         survey = await self.store.get(survey_id)
+        await self.record_event(
+            "public_views",
+            {
+                "source": "web",
+                "mode": "e2ee_full" if survey.crypto is not None else "plaintext",
+                **(client_info or {}),
+            },
+        )
         return self._public_survey(survey)
 
-    async def save_answer(self, survey_id: str, question_id: str, answer: AnswerIn) -> PublicSurvey:
+    async def save_answer(self, survey_id: str, question_id: str, answer: AnswerIn, client_info: dict[str, str] | None = None) -> PublicSurvey:
         survey = await self.store.get(survey_id)
         if survey.response.completed_at:
             raise SurveyLocked("survey is already completed")
-        question = self._question(survey, question_id)
-        self._validate_answer(question, answer)
+        if survey.crypto is not None:
+            self._validate_encrypted_answer(survey, question_id, answer.value)
+        else:
+            question = self._question(survey, question_id)
+            self._validate_answer(question, answer)
         survey.response.answers[question_id] = StoredAnswer(
             value=answer.value,
-            custom_options=answer.custom_options,
+            custom_options={} if survey.crypto is not None else answer.custom_options,
             answered_at=now_utc(),
         )
         survey.interactions += 1
         await self.store.save(survey, self._ttl_for(survey))
-        await self.store.increment_stat("answers_saved")
+        await self.record_event(
+            "answers_saved",
+            {
+                "source": "web",
+                "mode": "e2ee_full" if survey.crypto is not None else "plaintext",
+                **(client_info or {}),
+            },
+        )
         return self._public_survey(survey)
 
-    async def complete_survey(self, survey_id: str) -> SurveySummary:
+    async def complete_survey(self, survey_id: str, client_info: dict[str, str] | None = None) -> SurveySummary:
         survey = await self.store.get(survey_id)
         if not survey.response.completed_at:
             completed_at = now_utc()
             survey.response.completed_at = completed_at
             survey.expires_at = completed_at + timedelta(seconds=self.completed_ttl_seconds)
             await self.store.save(survey, self.completed_ttl_seconds)
-            await self.store.increment_stat("completed")
+            await self.record_event(
+                "completed",
+                {
+                    "source": "web",
+                    "mode": "e2ee_full" if survey.crypto is not None else "plaintext",
+                    **(client_info or {}),
+                },
+            )
         return self._summary(survey)
 
     async def edit_survey(self, survey_id: str, result_token: str, patch: SurveyPatch) -> PublicSurvey:
         survey = await self._get_for_agent(survey_id, result_token)
+        if survey.crypto is not None:
+            raise SurveyValidationError("encrypted surveys must be recreated by the CLI instead of edited on the server")
         if survey.response.completed_at:
             raise SurveyLocked("completed surveys cannot be edited")
         if patch.title is not None:
@@ -181,6 +236,13 @@ class SurveyService:
 
     async def get_answers(self, survey_id: str, result_token: str) -> SurveyAnswers:
         survey = await self._get_for_agent(survey_id, result_token)
+        if survey.crypto is not None:
+            return SurveyAnswers(
+                survey_id=survey.id,
+                title=survey.title,
+                summary=self._summary(survey),
+                answers=[self._encrypted_question_answer(question_id, survey.response.answers.get(question_id)) for question_id in survey.crypto.question_ids],
+            )
         return SurveyAnswers(
             survey_id=survey.id,
             title=survey.title,
@@ -190,6 +252,10 @@ class SurveyService:
 
     async def get_question_answer(self, survey_id: str, result_token: str, question_id: str) -> QuestionAnswer:
         survey = await self._get_for_agent(survey_id, result_token)
+        if survey.crypto is not None:
+            if question_id not in survey.crypto.question_ids:
+                raise SurveyValidationError(f"unknown question id: {question_id}")
+            return self._encrypted_question_answer(question_id, survey.response.answers.get(question_id))
         question = self._question(survey, question_id)
         return self._question_answer(question, survey.response.answers.get(question_id))
 
@@ -198,6 +264,9 @@ class SurveyService:
         if fmt == "json":
             return answers.model_dump_json(indent=2)
         lines = [f"# {answers.title}", "", f"Status: {answers.summary.status}", ""]
+        if any(answer.type == "encrypted" for answer in answers.answers):
+            lines.append("_Encrypted survey: use `mcp-surveys-cli export <survey_id>` on the machine that has the receipt._")
+            return "\n".join(lines).strip() + "\n"
         for answer in answers.answers:
             lines.append(f"## {answer.prompt}")
             lines.append(self._markdown_answer(answer.answer) if answer.answered else "_Unanswered_")
@@ -206,6 +275,29 @@ class SurveyService:
 
     async def get_stats(self) -> SurveyStats:
         return await self.store.get_stats()
+
+    async def record_event(self, event: str, labels: dict[str, str] | None = None) -> None:
+        safe_event = self._stat_label(event)
+        await self.store.increment_stat(safe_event)
+        await self._increment_observability(safe_event, labels or {})
+
+    async def _increment_observability(self, event: str, labels: dict[str, str]) -> None:
+        safe_event = self._stat_label(event)
+        safe_labels = {self._stat_label(key): self._stat_label(value) for key, value in labels.items() if value}
+        for key, value in safe_labels.items():
+            await self.store.increment_stat(f"{safe_event}.{key}.{value}")
+        client = safe_labels.get("client")
+        version = safe_labels.get("version")
+        mode = safe_labels.get("mode")
+        if client and version:
+            await self.store.increment_stat(f"{safe_event}.client_version.{client}.{version}")
+        if client and version and mode:
+            await self.store.increment_stat(f"{safe_event}.client_version_mode.{client}.{version}.{mode}")
+
+    @staticmethod
+    def _stat_label(value: str) -> str:
+        cleaned = _STAT_LABEL_RE.sub("-", str(value).strip())[:80].strip(".-_")
+        return cleaned or "unknown"
 
     async def _get_for_agent(self, survey_id: str, result_token: str) -> Survey:
         survey = await self.store.get(survey_id)
@@ -232,6 +324,24 @@ class SurveyService:
             if question.id == question_id:
                 return question
         raise SurveyValidationError(f"unknown question id: {question_id}")
+
+    @staticmethod
+    def _validate_encrypted_answer(survey: Survey, question_id: str, value: Any) -> None:
+        if survey.crypto is None:
+            raise SurveyValidationError("survey is not encrypted")
+        if question_id not in survey.crypto.question_ids:
+            raise SurveyValidationError(f"unknown question id: {question_id}")
+        if not isinstance(value, dict):
+            raise SurveyValidationError("encrypted answer must be an object")
+        if value.get("marker") != _ENCRYPTED_ANSWER_MARKER:
+            raise SurveyValidationError("encrypted answer marker is missing")
+        if value.get("v") != 1 or value.get("alg") != "RSA-OAEP-256+A256GCM":
+            raise SurveyValidationError("unsupported encrypted answer envelope")
+        if value.get("question_id") != question_id or value.get("revision") != survey.crypto.revision:
+            raise SurveyValidationError("encrypted answer metadata does not match the survey")
+        for key in ("encrypted_key", "nonce", "ciphertext"):
+            if not isinstance(value.get(key), str) or not value[key]:
+                raise SurveyValidationError(f"encrypted answer {key} is required")
 
     def _validate_answer(self, question: Question, answer: AnswerIn) -> None:
         custom_options = self._validated_custom_options(question, answer.custom_options)
@@ -310,14 +420,15 @@ class SurveyService:
             title=survey.title,
             description=survey.description,
             questions=survey.questions,
+            crypto=survey.crypto,
             answers=survey.response.answers,
             created_at=survey.created_at,
             expires_at=survey.expires_at,
             completed_at=survey.response.completed_at,
             answered_count=answered,
-            total_questions=len(survey.questions),
+            total_questions=self._total_questions(survey),
             required_answered_count=required_answered,
-            total_required_questions=sum(1 for question in survey.questions if question.required),
+            total_required_questions=self._total_required_questions(survey),
         )
 
     def _summary(self, survey: Survey) -> SurveySummary:
@@ -328,9 +439,9 @@ class SurveyService:
             title=survey.title,
             status="completed" if completed_at else "active",
             answered_count=answered,
-            total_questions=len(survey.questions),
+            total_questions=self._total_questions(survey),
             required_answered_count=required_answered,
-            total_required_questions=sum(1 for question in survey.questions if question.required),
+            total_required_questions=self._total_required_questions(survey),
             interactions=survey.interactions,
             created_at=survey.created_at,
             completed_at=completed_at,
@@ -339,7 +450,18 @@ class SurveyService:
             seconds_until_expiry=max(0, int((survey.expires_at - now_utc()).total_seconds())),
         )
 
+    @staticmethod
+    def _total_questions(survey: Survey) -> int:
+        return len(survey.crypto.question_ids) if survey.crypto is not None else len(survey.questions)
+
+    @staticmethod
+    def _total_required_questions(survey: Survey) -> int:
+        return len(survey.crypto.required_question_ids) if survey.crypto is not None else sum(1 for question in survey.questions if question.required)
+
     def _counts(self, survey: Survey) -> tuple[int, int]:
+        if survey.crypto is not None:
+            answered_ids = {question_id for question_id, answer in survey.response.answers.items() if self._answer_has_value(answer.value)}
+            return len(answered_ids & set(survey.crypto.question_ids)), len(answered_ids & set(survey.crypto.required_question_ids))
         answered = 0
         required_answered = 0
         for question in survey.questions:
@@ -359,6 +481,19 @@ class SurveyService:
         if isinstance(value, (list, dict)):
             return bool(value)
         return True
+
+    @staticmethod
+    def _encrypted_question_answer(question_id: str, answer: StoredAnswer | None) -> QuestionAnswer:
+        if answer is None:
+            return QuestionAnswer(question_id=question_id, prompt="Encrypted question", type="encrypted", answered=False)
+        return QuestionAnswer(
+            question_id=question_id,
+            prompt="Encrypted question",
+            type="encrypted",
+            answered=True,
+            answer=answer.value,
+            answered_at=answer.answered_at,
+        )
 
     def _question_answer(self, question: Question, answer: StoredAnswer | None) -> QuestionAnswer:
         if answer is None:

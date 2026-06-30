@@ -1,5 +1,5 @@
-"""Ephemeral MCP surveys."""
+"""Secure CLI-first ephemeral surveys."""
 
 __all__ = ["__version__"]
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"

@@ -56,8 +56,12 @@ class RedisSurveyStore:
         await self.client.hincrby(self._stats_key(), name, 1)
 
     async def get_stats(self) -> SurveyStats:
-        raw = await self.client.hgetall(self._stats_key())
-        return SurveyStats(**{key: int(value) for key, value in raw.items()})
+        redis_raw = await self.client.hgetall(self._stats_key())
+        raw = {key: int(value) for key, value in redis_raw.items()}
+        base_keys = ("created", "completed", "answers_saved", "public_views", "agent_requests", "upgrade_required", "rate_limit_hits")
+        base = {key: raw.get(key, 0) for key in base_keys}
+        breakdown = {key: value for key, value in raw.items() if key not in base}
+        return SurveyStats(**base, breakdown=breakdown)
 
     async def close(self) -> None:
         if self._client is not None:

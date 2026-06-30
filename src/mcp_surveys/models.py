@@ -105,6 +105,23 @@ class Question(ApiModel):
         return self
 
 
+class EncryptedBlob(ApiModel):
+    v: int = 1
+    alg: Literal["A256GCM"] = "A256GCM"
+    nonce: str = Field(min_length=1)
+    ciphertext: str = Field(min_length=1)
+
+
+class SurveyCrypto(ApiModel):
+    v: int = 1
+    mode: Literal["e2ee_full"] = "e2ee_full"
+    revision: int = Field(default=1, ge=1)
+    spec: EncryptedBlob
+    answer_public_key_spki: str = Field(min_length=1)
+    question_ids: list[str] = Field(min_length=1, max_length=MAX_SURVEY_QUESTIONS)
+    required_question_ids: list[str] = Field(default_factory=list, max_length=MAX_SURVEY_QUESTIONS)
+
+
 class AnswerIn(ApiModel):
     value: Any
     custom_options: dict[str, str] = Field(default_factory=dict)
@@ -126,17 +143,30 @@ class Survey(ApiModel):
     result_token: str
     title: str = Field(min_length=1, max_length=MAX_TITLE_CHARS)
     description: str | None = Field(default=None, max_length=MAX_DESCRIPTION_CHARS)
-    questions: list[Question] = Field(min_length=1, max_length=MAX_SURVEY_QUESTIONS)
+    questions: list[Question] = Field(default_factory=list, max_length=MAX_SURVEY_QUESTIONS)
+    crypto: SurveyCrypto | None = None
     response: SurveyResponse = Field(default_factory=SurveyResponse)
     interactions: int = 0
     created_at: datetime
     expires_at: datetime
+
+    @model_validator(mode="after")
+    def validate_plain_or_encrypted(self) -> "Survey":
+        if self.crypto is None and not self.questions:
+            raise ValueError("plaintext surveys require at least one question")
+        if self.crypto is not None and self.questions:
+            raise ValueError("encrypted surveys store questions inside crypto.spec, not plaintext questions")
+        return self
 
 
 class CreateSurveyRequest(ApiModel):
     title: str = Field(min_length=1, max_length=MAX_TITLE_CHARS)
     description: str | None = Field(default=None, max_length=MAX_DESCRIPTION_CHARS)
     questions: list[Question] = Field(min_length=1, max_length=MAX_SURVEY_QUESTIONS)
+
+
+class CreateEncryptedSurveyRequest(ApiModel):
+    crypto: SurveyCrypto
 
 
 class SurveyPatch(ApiModel):
@@ -173,6 +203,7 @@ class PublicSurvey(ApiModel):
     title: str
     description: str | None
     questions: list[Question]
+    crypto: SurveyCrypto | None = None
     answers: dict[str, StoredAnswer]
     created_at: datetime
     expires_at: datetime
@@ -202,7 +233,7 @@ class SurveySummary(ApiModel):
 class QuestionAnswer(ApiModel):
     question_id: str
     prompt: str
-    type: QuestionType
+    type: str
     answered: bool
     answer: Any = None
     answered_at: datetime | None = None
@@ -219,4 +250,8 @@ class SurveyStats(ApiModel):
     created: int = 0
     completed: int = 0
     answers_saved: int = 0
+    public_views: int = 0
+    agent_requests: int = 0
+    upgrade_required: int = 0
     rate_limit_hits: int = 0
+    breakdown: dict[str, int] = Field(default_factory=dict)

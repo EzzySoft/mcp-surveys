@@ -1,12 +1,12 @@
 [project]
 name = "mcp-surveys-cli"
-version = "0.3.0"
+version = "0.4.0"
 description = "Tiny CLI for the hosted mcp-surveys API."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "mcp-surveys contributors" }]
-dependencies = []
+dependencies = ["cryptography>=42"]
 
 [project.scripts]
 mcp-surveys-cli = "mcp_surveys_cli.main:entrypoint"
