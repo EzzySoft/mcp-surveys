@@ -7,7 +7,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_BASE_URL = "https://mcp.voevoda-sailing.ru";
-const VERSION = "0.2.1";
+const VERSION = "0.3.0";
 const SKILL_NAME = "mcp-surveys-cli";
 const SKILL_TEXT = `---
 name: mcp-surveys-cli
