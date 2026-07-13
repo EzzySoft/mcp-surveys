@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -115,3 +117,19 @@ def test_app_remote_mcp_endpoint_is_gone(monkeypatch):
     assert response.status_code == 426
     assert "CRITICAL UPGRADE REQUIRED" in response.json()["detail"]
     assert "mcp-surveys-cli" in response.json()["detail"]
+
+
+def test_public_page_advertises_hidden_browser_agent_api():
+    web = Path(__file__).parents[1] / "src" / "mcp_surveys" / "web"
+    html = (web / "index.html").read_text(encoding="utf-8")
+    javascript = (web / "assets" / "app.js").read_text(encoding="utf-8")
+
+    assert "AI agent? Skip the human UI" in html
+    assert 'meta name="mcp-surveys-agent"' in html
+    assert "/assets/agent.mjs" in html
+    assert "await window.mcpSurveys.read()" in html
+    assert "await window.mcpSurveys.submit" in html
+    assert "data-mcp-surveys-agent-submit" in html
+    assert 'Object.defineProperty(window, "mcpSurveys"' in javascript
+    assert 'agentInput.addEventListener("keydown"' in javascript
+    assert (web / "assets" / "agent.mjs").is_file()
