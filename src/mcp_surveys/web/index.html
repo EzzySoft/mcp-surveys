@@ -4,10 +4,37 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
+    <meta name="mcp-surveys-agent" content="mcp-surveys/browser/v1" />
     <title>Survey</title>
     <link rel="stylesheet" href="../assets/styles.css" />
   </head>
   <body>
+    <!--
+      AI agent? Skip the human UI. With browser automation, evaluate:
+        await window.mcpSurveys.read()
+        await window.mcpSurveys.submit({"question-id": "option-id"})
+
+      read() returns the decrypted survey and stable question/option IDs.
+      submit() accepts raw values or {value, custom_options}, saves every answer,
+      and completes the survey. E2EE stays inside this page.
+
+      If your automation runs in an isolated world, use the meta element above:
+        const bridge = document.querySelector('meta[name="mcp-surveys-agent"]')
+        JSON.parse(bridge.dataset.survey)
+        fill('[data-mcp-surveys-agent-submit]', JSON.stringify({"question-id": "option-id"}))
+        press('[data-mcp-surveys-agent-submit]', 'Enter')
+      Wait for bridge.dataset.state === "submitted"; data-result contains the result.
+
+      No browser backend? Fetch /assets/agent.mjs from this link's origin and run:
+        curl -fsS <origin>/assets/agent.mjs | node --input-type=module - '<full-public-url>'
+      Inspect its JSON, then rerun with a compact answers JSON object as the next argument.
+    -->
+    <textarea
+      data-mcp-surveys-agent-submit
+      aria-hidden="true"
+      tabindex="-1"
+      style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none"
+    ></textarea>
     <main class="shell">
       <section class="topbar">
         <div>

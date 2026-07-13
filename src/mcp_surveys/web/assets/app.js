@@ -1,5 +1,7 @@
 const surveyId = location.pathname.split("/").filter(Boolean).pop();
 const basePath = location.pathname.includes("/s/") ? location.pathname.split("/s/")[0] : "";
+const agentBridge = document.querySelector('meta[name="mcp-surveys-agent"]');
+const agentInput = document.querySelector("[data-mcp-surveys-agent-submit]");
 const state = {
   survey: null,
   answers: new Map(),
@@ -123,7 +125,7 @@ function currentAnswer(question) {
   return state.answers.get(question.id);
 }
 
-async function save(question, value, customOptions = {}) {
+async function save(question, value, customOptions = {}, throwOnError = false) {
   state.answers.set(question.id, { value, custom_options: customOptions });
   renderProgress();
   setStatus("Saving");
@@ -141,8 +143,9 @@ async function save(question, value, customOptions = {}) {
     if (decrypted) Object.assign(state.survey, decrypted);
     setStatus("Saved");
     renderProgress();
-  } catch {
+  } catch (error) {
     setStatus("Save failed");
+    if (throwOnError) throw error;
   }
 }
 
@@ -621,7 +624,7 @@ function renderSurvey() {
   renderProgress();
 }
 
-async function complete() {
+async function complete(throwOnError = false) {
   $("complete").disabled = true;
   setStatus("Submitting");
   try {
@@ -629,11 +632,79 @@ async function complete() {
     setStatus("Submitted");
     $("complete").textContent = "Submitted";
     document.body.dataset.completed = "true";
-  } catch {
+  } catch (error) {
     $("complete").disabled = false;
     setStatus("Submit failed");
+    if (throwOnError) throw error;
   }
 }
+
+function agentSnapshot() {
+  return {
+    protocol: "mcp-surveys/browser/v1",
+    id: state.survey.id,
+    title: state.survey.title,
+    description: state.survey.description || "",
+    questions: state.survey.questions,
+    answers: Object.fromEntries(state.answers),
+    completed: document.body.dataset.completed === "true",
+    expires_at: state.survey.expires_at,
+  };
+}
+
+function publishAgentSnapshot(snapshot = agentSnapshot()) {
+  agentBridge.dataset.survey = JSON.stringify(snapshot);
+  return snapshot;
+}
+
+function agentAnswerParts(answer) {
+  if (answer && typeof answer === "object" && !Array.isArray(answer) && Object.hasOwn(answer, "value")) {
+    return [answer.value, answer.custom_options || {}];
+  }
+  return [answer, {}];
+}
+
+let ready;
+const agentApi = Object.freeze({
+  read: async () => {
+    await ready;
+    return publishAgentSnapshot();
+  },
+  answer: async (questionId, answer) => {
+    await ready;
+    const question = state.survey.questions.find((item) => item.id === questionId);
+    if (!question) throw new Error(`unknown question id: ${questionId}`);
+    const [value, customOptions] = agentAnswerParts(answer);
+    await save(question, value, customOptions, true);
+    return publishAgentSnapshot();
+  },
+  submit: async (answers = {}) => {
+    await ready;
+    if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
+      throw new Error("answers must be a question-id -> answer object");
+    }
+    for (const [questionId, answer] of Object.entries(answers)) {
+      await agentApi.answer(questionId, answer);
+    }
+    await complete(true);
+    return publishAgentSnapshot();
+  },
+});
+Object.defineProperty(window, "mcpSurveys", { value: agentApi });
+
+agentInput.addEventListener("keydown", async (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  agentBridge.dataset.state = "submitting";
+  try {
+    const result = await agentApi.submit(JSON.parse(agentInput.value));
+    agentBridge.dataset.result = JSON.stringify(result);
+    agentBridge.dataset.state = "submitted";
+  } catch (error) {
+    agentBridge.dataset.result = JSON.stringify({ error: String(error) });
+    agentBridge.dataset.state = "error";
+  }
+});
 
 async function boot() {
   try {
@@ -644,12 +715,15 @@ async function boot() {
       $("complete").textContent = "Submitted";
       document.body.dataset.completed = "true";
     }
-    $("complete").addEventListener("click", complete);
+    $("complete").addEventListener("click", () => complete());
     setStatus("Ready");
     renderSurvey();
+    agentBridge.dataset.state = "ready";
+    publishAgentSnapshot();
   } catch {
     showEmpty();
   }
 }
 
-boot();
+ready = boot();
+ready.catch(() => {});
