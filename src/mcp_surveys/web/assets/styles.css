@@ -78,14 +78,22 @@ h1,
 
 .topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: clamp(32px, 7vw, 80px);
-  align-items: start;
+  grid-template-columns: 1fr;
+  gap: 24px;
   padding: clamp(28px, 6vh, 70px) 0 48px;
 }
 
+.topbar-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line-strong);
+}
+
 .eyebrow {
-  margin: 0 0 22px;
+  margin: 0;
   color: var(--muted);
   font-size: 13px;
   font-weight: 650;
@@ -104,27 +112,22 @@ h1 {
 
 .description {
   max-width: 680px;
-  margin: 24px 0 0;
+  margin: 0;
   color: var(--ink);
   font-size: clamp(18px, 2.2vw, 23px);
   line-height: 1.35;
 }
 
 .status-panel {
-  display: grid;
-  gap: 12px;
-  margin-top: 10px;
-  padding-top: 6px;
-  border-top: 1px solid var(--line-strong);
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 13px;
 }
 
 .status-panel span {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-  justify-content: space-between;
+  white-space: nowrap;
 }
 
 .status-panel span:first-child {
@@ -990,7 +993,6 @@ body[data-completed="true"] .primary:disabled {
     padding: 24px 0 42px;
   }
 
-  .topbar,
   .question-head,
   .match-row,
   .custom-row,
@@ -1001,8 +1003,13 @@ body[data-completed="true"] .primary:disabled {
   }
 
   .topbar {
-    gap: 28px;
+    gap: 20px;
     padding: 34px 0 34px;
+  }
+
+  .topbar-meta {
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
   h1 {
