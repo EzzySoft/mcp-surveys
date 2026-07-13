@@ -58,6 +58,7 @@ a:hover {
   text-decoration-thickness: 2px;
 }
 
+h1,
 .description a,
 .question h2 a,
 .rank-label a,
@@ -92,13 +93,13 @@ a:hover {
 }
 
 h1 {
-  max-width: 11ch;
+  max-width: 18ch;
   margin: 0;
   font-family: Georgia, "Times New Roman", ui-serif, serif;
-  font-size: clamp(56px, 9vw, 112px);
+  font-size: clamp(44px, 7vw, 88px);
   font-weight: 400;
   letter-spacing: 0;
-  line-height: 0.9;
+  line-height: 0.95;
 }
 
 .description {
@@ -1006,7 +1007,7 @@ body[data-completed="true"] .primary:disabled {
 
   h1 {
     max-width: 100%;
-    font-size: clamp(54px, 18vw, 82px);
+    font-size: clamp(40px, 12vw, 64px);
   }
 
   .description {

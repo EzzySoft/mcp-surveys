@@ -114,8 +114,12 @@ sees plaintext in both modes. No crypto code changed.
   assignments for all inline-linkified fields, rewrite of `optionButton`
   to add the `↗` icon-link with `stopPropagation`.
 - edit `src/mcp_surveys/web/assets/styles.css` — base `<a>` styling,
-  `overflow-wrap: anywhere` for linkified text containers, `.choice-link`
-  and `.choice--has-link` rules.
+  `overflow-wrap: anywhere` for linkified text containers (including `h1`),
+  `.choice-link` and `.choice--has-link` rules, and a resize of `h1`
+  (`max-width: 11ch → 18ch`, `font-size: clamp(56px, 9vw, 112px) →
+  clamp(44px, 7vw, 88px)`, `line-height: 0.9 → 0.95`, mobile
+  `clamp(54px, 18vw, 82px) → clamp(40px, 12vw, 64px)`) so long titles that
+  contain URLs do not occupy half the viewport height.
 
 ### Tests
 
