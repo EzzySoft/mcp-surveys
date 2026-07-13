@@ -45,6 +45,8 @@ The hosted API has a critical upgrade gate: stale clients and removed MCP integr
 Use \`MCP_SURVEYS_BASE_URL\` or \`--base-url\` for another instance.
 
 Prefer structured buttons, ranking, matching, scale, \`color_choice\`, and \`binary_tradeoff\`; use \`text\` only when the answer cannot fit those shapes.
+
+Any \`http(s)://\` URL in title, description, prompt, option text, scale labels, or tradeoff theses renders as a clickable link on the survey page (opens in a new tab). Use this to give the human context — docs, screenshots, dashboards — without dumping it into the prompt itself.
 `;
 const TEMPLATES = {
   decision: {
