@@ -168,6 +168,28 @@ select:focus-visible {
   font-size: 12px;
 }
 
+a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+h1,
+.description a,
+.question h2 a,
+.rank-label a,
+.match-row strong a,
+.scale-value-row a,
+.tradeoff-definition-copy strong a,
+.tradeoff-axis-title a {
+  overflow-wrap: anywhere;
+}
+
 .shell {
   width: min(1400px, 100%);
   min-height: 100vh;
@@ -242,6 +264,16 @@ select:focus-visible {
   font-weight: 650;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.eyebrow--secure {
+  color: var(--success);
+}
+
+.eyebrow--secure::before {
+  content: "\1F512";
+  margin-right: 6px;
+  font-size: 11px;
 }
 
 h1 {
@@ -434,6 +466,13 @@ h1 {
   border-left: 1px solid var(--line);
 }
 
+.choice-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  gap: 10px;
+  align-items: center;
+}
+
 .choice {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 20px;
@@ -450,6 +489,33 @@ h1 {
   text-align: left;
   cursor: pointer;
   transition: background 160ms ease, color 160ms ease;
+}
+
+.choice-label {
+  overflow-wrap: anywhere;
+}
+
+.choice-link {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.choice-link:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.choice-link:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 .choice:hover {

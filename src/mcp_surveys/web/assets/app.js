@@ -1,3 +1,5 @@
+import { tokenizeLinks, firstUrl } from "./text.mjs";
+
 const surveyId = location.pathname.split("/").filter(Boolean).pop();
 const basePath = location.pathname.includes("/s/") ? location.pathname.split("/s/")[0] : "";
 const agentBridge = document.querySelector('meta[name="mcp-surveys-agent"]');
@@ -20,6 +22,25 @@ function setTheme(theme) {
 $("theme-toggle").addEventListener("click", () => {
   setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 });
+
+// Render a string into `el`, linkifying any http(s) URLs as clickable anchors.
+// Uses text nodes for prose (auto-escaped) and a real <a> for each URL, so it
+// is XSS-safe without innerHTML. Links open in a new tab with a safe rel.
+function renderLinkified(el, text) {
+  el.replaceChildren();
+  for (const token of tokenizeLinks(text || "")) {
+    if (token.type === "text") {
+      el.append(document.createTextNode(token.value));
+    } else {
+      const a = document.createElement("a");
+      a.href = token.href;
+      a.textContent = token.text;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      el.append(a);
+    }
+  }
+}
 
 function questionTypeLabel(type) {
   const labels = {
@@ -186,10 +207,28 @@ function optionButton(question, option, selected, onClick) {
   button.type = "button";
   button.className = `choice ${isMulti ? "choice--multiple" : "choice--single"}${selected ? " is-selected" : ""}`;
   button.setAttribute("aria-pressed", selected ? "true" : "false");
-  button.innerHTML = `<span></span><span class="mark" aria-hidden="true"></span>`;
-  button.firstElementChild.textContent = option.text;
+  const label = document.createElement("span");
+  label.className = "choice-label";
+  label.textContent = option.text;
+  const mark = document.createElement("span");
+  mark.className = "mark";
+  mark.setAttribute("aria-hidden", "true");
+  button.append(label, mark);
   button.addEventListener("click", onClick);
-  return button;
+  const href = firstUrl(option.text);
+  if (!href) return button;
+
+  const row = document.createElement("div");
+  row.className = "choice-row";
+  const link = document.createElement("a");
+  link.className = "choice-link";
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.setAttribute("aria-label", `Open ${href} in a new tab`);
+  link.textContent = "↗";
+  row.append(button, link);
+  return row;
 }
 
 function renderCustom(question, wrapper, currentCustom = {}) {
@@ -310,8 +349,8 @@ function renderRanking(question) {
     if (!option) return;
     const row = document.createElement("div");
     row.className = "rank-row";
-    row.innerHTML = `<span class="rank-index">${index + 1}</span><span></span>`;
-    row.children[1].textContent = option.text;
+    row.innerHTML = `<span class="rank-index">${index + 1}</span><span class="rank-label"></span>`;
+    renderLinkified(row.children[1], option.text);
 
     const up = document.createElement("button");
     up.type = "button";
@@ -352,7 +391,7 @@ function renderMatching(question) {
     const row = document.createElement("div");
     row.className = "match-row";
     const label = document.createElement("strong");
-    label.textContent = left.text;
+    renderLinkified(label, left.text);
     const connector = document.createElement("span");
     connector.className = "connector";
     connector.textContent = "→";
@@ -405,10 +444,10 @@ function renderScale(question) {
   const valueRow = document.createElement("div");
   valueRow.className = "scale-value-row";
   const minLabel = document.createElement("span");
-  minLabel.textContent = question.min_label || String(min);
+  renderLinkified(minLabel, question.min_label || String(min));
   const output = document.createElement("strong");
   const maxLabel = document.createElement("span");
-  maxLabel.textContent = question.max_label || String(max);
+  renderLinkified(maxLabel, question.max_label || String(max));
   valueRow.append(minLabel, output, maxLabel);
 
   const control = document.createElement("div");
@@ -513,8 +552,8 @@ function renderBinaryTradeoff(question) {
       <span class="tradeoff-letter">B</span>
     </div>
   `;
-  axis.querySelector(".tradeoff-axis-end--left .tradeoff-axis-title").textContent = left.text;
-  axis.querySelector(".tradeoff-axis-end--right .tradeoff-axis-title").textContent = right.text;
+  renderLinkified(axis.querySelector(".tradeoff-axis-end--left .tradeoff-axis-title"), left.text);
+  renderLinkified(axis.querySelector(".tradeoff-axis-end--right .tradeoff-axis-title"), right.text);
 
   const input = document.createElement("input");
   input.type = "range";
@@ -591,7 +630,7 @@ function tradeoffDefinition(letter, label, text, side) {
   const eyebrow = document.createElement("span");
   eyebrow.textContent = label;
   const title = document.createElement("strong");
-  title.textContent = text;
+  renderLinkified(title, text);
   copy.append(eyebrow, title);
   card.append(mark, copy);
   return card;
@@ -613,7 +652,7 @@ function renderQuestion(question) {
   const copy = document.createElement("div");
   copy.className = "question-copy";
   const title = document.createElement("h2");
-  title.textContent = question.prompt;
+  renderLinkified(title, question.prompt);
   const type = document.createElement("span");
   type.className = "question-type";
   type.textContent = question.required ? `${questionTypeLabel(question.type)} · required` : questionTypeLabel(question.type);
@@ -634,8 +673,16 @@ function renderQuestion(question) {
 }
 
 function renderSurvey() {
-  $("title").textContent = state.survey.title;
-  $("description").textContent = state.survey.description || "";
+  renderLinkified($("title"), state.survey.title);
+  renderLinkified($("description"), state.survey.description || "");
+  const eyebrow = document.querySelector(".eyebrow");
+  if (isSecureSurvey()) {
+    eyebrow.textContent = "Temporary survey · End-to-end encrypted";
+    eyebrow.classList.add("eyebrow--secure");
+  } else {
+    eyebrow.textContent = "Temporary survey";
+    eyebrow.classList.remove("eyebrow--secure");
+  }
   setExpiry(state.survey.expires_at);
   state.answers = isSecureSurvey() ? new Map() : new Map(Object.entries(state.survey.answers || {}));
   $("questions").innerHTML = "";
