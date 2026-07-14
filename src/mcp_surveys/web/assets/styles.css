@@ -104,7 +104,7 @@ h1 {
   max-width: 18ch;
   margin: 0;
   font-family: Georgia, "Times New Roman", ui-serif, serif;
-  font-size: clamp(44px, 7vw, 88px);
+  font-size: clamp(32px, 5vw, 56px);
   font-weight: 400;
   letter-spacing: 0;
   line-height: 0.95;
@@ -1013,7 +1013,7 @@ body[data-completed="true"] .primary:disabled {
 
   h1 {
     max-width: 100%;
-    font-size: clamp(40px, 12vw, 64px);
+    font-size: clamp(28px, 9vw, 44px);
   }
 
   .description {
