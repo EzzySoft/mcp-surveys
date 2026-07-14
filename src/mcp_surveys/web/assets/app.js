@@ -659,6 +659,14 @@ function renderQuestion(question) {
 function renderSurvey() {
   renderLinkified($("title"), state.survey.title);
   renderLinkified($("description"), state.survey.description || "");
+  const eyebrow = document.querySelector(".eyebrow");
+  if (isSecureSurvey()) {
+    eyebrow.textContent = "Temporary survey · End-to-end encrypted";
+    eyebrow.classList.add("eyebrow--secure");
+  } else {
+    eyebrow.textContent = "Temporary survey";
+    eyebrow.classList.remove("eyebrow--secure");
+  }
   setExpiry(state.survey.expires_at);
   state.answers = isSecureSurvey() ? new Map() : new Map(Object.entries(state.survey.answers || {}));
   $("questions").innerHTML = "";

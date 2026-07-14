@@ -100,6 +100,16 @@ h1,
   letter-spacing: 0.01em;
 }
 
+.eyebrow--secure {
+  color: var(--success);
+}
+
+.eyebrow--secure::before {
+  content: "\1F512";
+  margin-right: 6px;
+  font-size: 11px;
+}
+
 h1 {
   margin: 0;
   font-family: Georgia, "Times New Roman", ui-serif, serif;
