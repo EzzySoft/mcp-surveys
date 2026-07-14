@@ -9,6 +9,18 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
+function setTheme(theme) {
+  const isDark = theme === "dark";
+  document.documentElement.dataset.theme = isDark ? "dark" : "light";
+  $("theme-toggle").setAttribute("aria-pressed", String(isDark));
+  $("theme-label").textContent = isDark ? "Light theme" : "Dark theme";
+  $("theme-icon").textContent = isDark ? "☼" : "◐";
+}
+
+$("theme-toggle").addEventListener("click", () => {
+  setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+});
+
 function questionTypeLabel(type) {
   const labels = {
     single_choice: "Choose one",
@@ -594,12 +606,19 @@ function renderQuestion(question) {
 
   const head = document.createElement("div");
   head.className = "question-head";
+  const number = document.createElement("span");
+  number.className = "question-number";
+  number.textContent = String(state.survey.questions.findIndex((item) => item.id === question.id) + 1).padStart(2, "0");
+  number.setAttribute("aria-hidden", "true");
+  const copy = document.createElement("div");
+  copy.className = "question-copy";
   const title = document.createElement("h2");
   title.textContent = question.prompt;
   const type = document.createElement("span");
   type.className = "question-type";
   type.textContent = question.required ? `${questionTypeLabel(question.type)} · required` : questionTypeLabel(question.type);
-  head.append(title, type);
+  copy.append(type, title);
+  head.append(number, copy);
   section.append(head);
 
   if (question.type === "single_choice") section.append(renderChoice(question, false));

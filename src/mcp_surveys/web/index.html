@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="mcp-surveys-agent" content="mcp-surveys/browser/v1" />
     <title>Survey</title>
     <link rel="stylesheet" href="../assets/styles.css" />
@@ -35,29 +35,55 @@
       tabindex="-1"
       style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none"
     ></textarea>
+    <header class="chrome">
+      <div class="chrome-cell chrome-product">MCP / Surveys</div>
+      <div class="chrome-cell chrome-wordmark">Decision Atelier</div>
+      <div class="chrome-cell chrome-progress">
+        <span><strong id="progress">0 / 0</strong> answered</span>
+        <span class="progress-track" aria-hidden="true">
+          <span id="progress-bar" class="progress-bar"></span>
+        </span>
+      </div>
+      <div class="chrome-cell">
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">
+          <span id="theme-label">Dark theme</span>
+          <span id="theme-icon" class="theme-icon" aria-hidden="true">◐</span>
+        </button>
+      </div>
+    </header>
+
     <main class="shell">
       <section class="topbar">
-        <div>
+        <div class="survey-meta" aria-hidden="true">
+          <span>Private session</span>
+          <span>Structured decision</span>
+          <span>Short-lived link</span>
+        </div>
+        <div class="hero-title">
           <p class="eyebrow">Temporary survey</p>
           <h1 id="title">Loading</h1>
-          <p id="description" class="description"></p>
         </div>
-        <div class="status-panel">
-          <span id="save-status">Opening</span>
-          <span id="expiry-status">Link expires soon</span>
+        <div class="hero-foot">
+          <p id="description" class="description"></p>
+          <div class="status-panel">
+            <span id="save-status">Opening</span>
+            <span id="expiry-status">Link expires soon</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="questions-intro">
+        <span>00</span>
+        <div>
+          <p>Before you begin</p>
+          <h2>Answer precisely.<br />Change anything before submitting.</h2>
         </div>
       </section>
 
       <section id="questions" class="questions" aria-live="polite"></section>
 
       <footer class="footer">
-        <div>
-          <strong id="progress">0 / 0</strong>
-          <span>answered</span>
-          <div class="progress-track" aria-hidden="true">
-            <div id="progress-bar" class="progress-bar"></div>
-          </div>
-        </div>
+        <span>All required questions must be answered</span>
         <button id="complete" class="primary" type="button">Submit</button>
       </footer>
     </main>

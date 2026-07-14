@@ -130,6 +130,9 @@ def test_public_page_advertises_hidden_browser_agent_api():
     assert "await window.mcpSurveys.read()" in html
     assert "await window.mcpSurveys.submit" in html
     assert "data-mcp-surveys-agent-submit" in html
+    assert 'data-theme="light"' in html
+    assert 'id="theme-toggle"' in html
     assert 'Object.defineProperty(window, "mcpSurveys"' in javascript
     assert 'agentInput.addEventListener("keydown"' in javascript
+    assert '$("theme-toggle").addEventListener("click"' in javascript
     assert (web / "assets" / "agent.mjs").is_file()
