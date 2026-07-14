@@ -207,6 +207,13 @@ h1 {
   padding: 20px 28px 28px;
 }
 
+.choice-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  gap: 10px;
+  align-items: center;
+}
+
 .choice {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 24px;
@@ -226,10 +233,6 @@ h1 {
     background 140ms ease,
     color 140ms ease,
     transform 140ms ease;
-}
-
-.choice--has-link {
-  grid-template-columns: minmax(0, 1fr) auto 24px;
 }
 
 .choice-label {
@@ -254,13 +257,9 @@ h1 {
   background: var(--accent-soft);
 }
 
-.choice.is-selected .choice-link {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.choice.is-selected .choice-link:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.18);
+.choice-link:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 .choice:hover {

@@ -201,25 +201,22 @@ function optionButton(question, option, selected, onClick) {
   const mark = document.createElement("span");
   mark.className = "mark";
   mark.setAttribute("aria-hidden", "true");
-  button.append(label);
-  const href = firstUrl(option.text);
-  if (href) {
-    button.classList.add("choice--has-link");
-    const a = document.createElement("a");
-    a.className = "choice-link";
-    a.href = href;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    a.setAttribute("aria-label", `Open ${href} in a new tab`);
-    a.textContent = "↗";
-    a.addEventListener("click", (event) => {
-      event.stopPropagation();
-    });
-    button.append(a);
-  }
-  button.append(mark);
+  button.append(label, mark);
   button.addEventListener("click", onClick);
-  return button;
+  const href = firstUrl(option.text);
+  if (!href) return button;
+
+  const row = document.createElement("div");
+  row.className = "choice-row";
+  const link = document.createElement("a");
+  link.className = "choice-link";
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.setAttribute("aria-label", `Open ${href} in a new tab`);
+  link.textContent = "↗";
+  row.append(button, link);
+  return row;
 }
 
 function renderCustom(question, wrapper, currentCustom = {}) {

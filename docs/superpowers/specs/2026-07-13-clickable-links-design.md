@@ -46,21 +46,19 @@ Inline linkification (text rendered as a mix of text nodes and `<a>`):
 
 ### Where an icon-link is used instead
 
-Inside `<button>` elements, nesting an `<a>` is invalid HTML and a full link
-would conflict with the click that selects the option. For these we keep the
-label as plain text and, when the label contains a URL, append a small `↗`
-icon-link beside it:
+Nesting an `<a>` inside a `<button>` is invalid HTML and would conflict with
+the click that selects the option. For these we keep the label as plain text
+and, when the label contains a URL, place the button and a small sibling `↗`
+icon-link in a `.choice-row`:
 
 - `single_choice` and `multiple_choice` option buttons (`.choice`)
 
 The icon-link:
 
 - Opens the first URL found in the option text in a new tab.
-- Calls `event.stopPropagation()` on click so selecting the option is not
-  triggered when the user clicks the icon.
-- Gets class `choice--has-link` on the parent button, which switches the
-  button grid from `minmax(0,1fr) 24px` to `minmax(0,1fr) auto 24px` so the
-  icon, label, and selection mark each get their own column.
+- Is a sibling of the option button, so activating it cannot select the option
+  and the markup contains no nested interactive controls.
+- Sits beside the button in a two-column `.choice-row` grid.
 
 ### Where links are deliberately not rendered
 
@@ -112,10 +110,10 @@ sees plaintext in both modes. No crypto code changed.
 - edit `src/mcp_surveys/web/assets/app.js` — `import` from `text.mjs`,
   `renderLinkified(el, text)` helper, replacement of `textContent`
   assignments for all inline-linkified fields, rewrite of `optionButton`
-  to add the `↗` icon-link with `stopPropagation`.
+  to place the option button and `↗` icon-link as siblings.
 - edit `src/mcp_surveys/web/assets/styles.css` — base `<a>` styling,
   `overflow-wrap: anywhere` for linkified text containers (including `h1`),
-  `.choice-link` and `.choice--has-link` rules, and a resize of `h1`
+  `.choice-row` and `.choice-link` rules, and a resize of `h1`
   (`max-width: 11ch → 18ch`, `font-size: clamp(56px, 9vw, 112px) →
   clamp(44px, 7vw, 88px)`, `line-height: 0.9 → 0.95`, mobile
   `clamp(54px, 18vw, 82px) → clamp(40px, 12vw, 64px)`) so long titles that
@@ -131,9 +129,8 @@ sees plaintext in both modes. No crypto code changed.
 - `uv run --extra dev pytest` — existing 22 tests stay green (no server
   contract changed).
 - Manual Playwright verification on a mock page: 8 links render across
-  title/description/prompt/ranking/scale, icon-link in choice button
-  opens a new tab, `stopPropagation` prevents the option from being
-  selected on icon click, grid layout switches to 3 columns.
+  title/description/prompt/ranking/scale, the sibling icon-link beside a
+  choice button opens a new tab without selecting the option.
 
 ### Out of scope
 
