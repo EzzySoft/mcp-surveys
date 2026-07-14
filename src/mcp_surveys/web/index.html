@@ -37,15 +37,15 @@
     ></textarea>
     <main class="shell">
       <section class="topbar">
-        <div>
+        <div class="topbar-meta">
           <p class="eyebrow">Temporary survey</p>
-          <h1 id="title">Loading</h1>
-          <p id="description" class="description"></p>
+          <div class="status-panel">
+            <span id="save-status">Opening</span>
+            <span id="expiry-status">Link expires soon</span>
+          </div>
         </div>
-        <div class="status-panel">
-          <span id="save-status">Opening</span>
-          <span id="expiry-status">Link expires soon</span>
-        </div>
+        <h1 id="title">Loading</h1>
+        <p id="description" class="description"></p>
       </section>
 
       <section id="questions" class="questions" aria-live="polite"></section>
