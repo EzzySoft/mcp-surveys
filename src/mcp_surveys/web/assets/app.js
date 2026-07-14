@@ -256,8 +256,13 @@ function renderCustom(question, wrapper, currentCustom = {}) {
 
   const row = document.createElement("div");
   row.className = "custom-row";
+  const field = document.createElement("label");
+  field.className = "custom-field";
+  const label = document.createElement("span");
+  label.className = "custom-label";
+  label.textContent = "Custom";
   const input = document.createElement("input");
-  input.placeholder = "Add your own option";
+  input.placeholder = "Type an option";
   input.maxLength = 300;
   const button = document.createElement("button");
   button.type = "button";
@@ -284,7 +289,8 @@ function renderCustom(question, wrapper, currentCustom = {}) {
     }
     renderQuestion(question);
   });
-  row.append(input, button);
+  field.append(label, input);
+  row.append(field, button);
   wrapper.append(row);
 }
 
@@ -326,7 +332,7 @@ function renderColorChoice(question) {
   const selected = currentAnswer(question)?.value;
 
   for (const option of question.options) {
-    const color = isHexColor(option.color) ? option.color : "#ded7d1";
+    const color = isHexColor(option.color) ? option.color : "#dfe3ea";
     const button = document.createElement("button");
     button.type = "button";
     button.className = `color-choice${selected === option.id ? " is-selected" : ""}`;
@@ -431,6 +437,7 @@ function renderMatching(question) {
       option.textContent = right.text;
       select.append(option);
     }
+    select.setAttribute("aria-label", `Match ${left.text}`);
     select.value = current[left.id] || "";
     select.addEventListener("change", () => {
       const next = { ...(currentAnswer(question)?.value || {}) };
@@ -451,6 +458,7 @@ function renderText(question) {
   textarea.maxLength = 2000;
   textarea.value = currentAnswer(question)?.value || "";
   textarea.placeholder = "Write a short answer";
+  textarea.setAttribute("aria-label", question.prompt);
   textarea.addEventListener("input", () => save(question, textarea.value));
   wrapper.append(textarea);
   return wrapper;
