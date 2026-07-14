@@ -23,6 +23,13 @@ $("theme-toggle").addEventListener("click", () => {
   setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 });
 
+$("description-toggle").addEventListener("click", () => {
+  const expanded = $("description-toggle").getAttribute("aria-expanded") === "true";
+  $("description-toggle").setAttribute("aria-expanded", String(!expanded));
+  $("description-toggle").textContent = expanded ? "More context" : "Less context";
+  $("description").dataset.collapsed = String(expanded);
+});
+
 // Render a string into `el`, linkifying any http(s) URLs as clickable anchors.
 // Uses text nodes for prose (auto-escaped) and a real <a> for each URL, so it
 // is XSS-safe without innerHTML. Links open in a new tab with a safe rel.
@@ -40,6 +47,19 @@ function renderLinkified(el, text) {
       el.append(a);
     }
   }
+}
+
+function setCopyScale(el, text, medium, long, extreme) {
+  const scale = text.length > extreme ? "extreme" : text.length > long ? "long" : text.length > medium ? "medium" : "short";
+  el.dataset.copy = scale;
+  return scale;
+}
+
+function optionGridColumns(options) {
+  const longest = Math.max(0, ...options.map((option) => option.text.length));
+  if (longest > 160) return 1;
+  if (longest > 72) return Math.min(2, options.length);
+  return Math.min(3, options.length);
 }
 
 function questionTypeLabel(type) {
@@ -271,12 +291,15 @@ function renderCustom(question, wrapper, currentCustom = {}) {
 function renderChoice(question, multi) {
   const wrapper = document.createElement("div");
   wrapper.className = "choices";
+  const grid = document.createElement("div");
+  grid.className = "option-grid";
+  grid.dataset.columns = String(optionGridColumns(question.options));
   const answer = currentAnswer(question);
   const selected = new Set(Array.isArray(answer?.value) ? answer.value : answer?.value ? [answer.value] : []);
   const custom = answer?.custom_options || {};
 
   for (const option of question.options) {
-    wrapper.append(optionButton(question, option, selected.has(option.id), () => {
+    grid.append(optionButton(question, option, selected.has(option.id), () => {
       if (multi) {
         selected.has(option.id) ? selected.delete(option.id) : selected.add(option.id);
         save(question, [...selected], custom);
@@ -287,6 +310,7 @@ function renderChoice(question, multi) {
     }));
   }
 
+  wrapper.append(grid);
   renderCustom(question, wrapper, custom);
   return wrapper;
 }
@@ -297,7 +321,8 @@ function isHexColor(value) {
 
 function renderColorChoice(question) {
   const wrapper = document.createElement("div");
-  wrapper.className = "color-choices";
+  wrapper.className = "color-choices option-grid";
+  wrapper.dataset.columns = String(optionGridColumns(question.options));
   const selected = currentAnswer(question)?.value;
 
   for (const option of question.options) {
@@ -653,6 +678,7 @@ function renderQuestion(question) {
   copy.className = "question-copy";
   const title = document.createElement("h2");
   renderLinkified(title, question.prompt);
+  setCopyScale(title, question.prompt, 90, 220, 600);
   const type = document.createElement("span");
   type.className = "question-type";
   type.textContent = question.required ? `${questionTypeLabel(question.type)} · required` : questionTypeLabel(question.type);
@@ -674,7 +700,17 @@ function renderQuestion(question) {
 
 function renderSurvey() {
   renderLinkified($("title"), state.survey.title);
-  renderLinkified($("description"), state.survey.description || "");
+  document.querySelector(".hero-title").dataset.copy = setCopyScale($("title"), state.survey.title, 40, 80, 140);
+  const description = state.survey.description || "";
+  renderLinkified($("description"), description);
+  const hasDescription = description.trim().length > 0;
+  const collapsibleDescription = description.length > 360;
+  $("description-panel").hidden = !hasDescription;
+  $("description-toggle").hidden = !collapsibleDescription;
+  $("description-toggle").textContent = "More context";
+  $("description-toggle").setAttribute("aria-expanded", "false");
+  $("description").dataset.collapsed = String(collapsibleDescription);
+  document.querySelector(".hero-foot").dataset.description = hasDescription ? "present" : "empty";
   const eyebrow = document.querySelector(".eyebrow");
   if (isSecureSurvey()) {
     eyebrow.textContent = "Temporary survey · End-to-end encrypted";
