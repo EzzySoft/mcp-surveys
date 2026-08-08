@@ -55,8 +55,9 @@ jobs:
           test -n "$SSH_USER"
           SSH_PORT="${SSH_PORT:-22}"
 
-          ssh -i ~/.ssh/claw_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" <<'REMOTE'
+          ssh -i ~/.ssh/claw_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" bash -s -- "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
+          expected_sha=$1
           cd "$HOME/.local/share/mcp-surveys"
 
           if [ "$(git branch --show-current)" != "main" ]; then
@@ -71,7 +72,18 @@ jobs:
             exit 1
           fi
 
-          git pull --ff-only origin main
+          git fetch --no-tags origin main
+          remote_sha=$(git rev-parse origin/main)
+          if [ "$remote_sha" != "$expected_sha" ]; then
+            echo "Refusing to deploy: origin/main $remote_sha does not match workflow $expected_sha" >&2
+            exit 1
+          fi
+          git merge --ff-only "$expected_sha"
+          deployed_sha=$(git rev-parse HEAD)
+          if [ "$deployed_sha" != "$expected_sha" ]; then
+            echo "Refusing to deploy unreviewed HEAD $deployed_sha (expected $expected_sha)" >&2
+            exit 1
+          fi
 
           compose=(docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml)
           if ! "${compose[@]}" up -d --build --wait --wait-timeout 180; then

@@ -238,12 +238,26 @@ async def test_observability_labels_are_bounded():
             "unrecognized": "must-not-be-recorded",
         },
     )
+    await service.record_event(
+        "upgrade_required",
+        {
+            "source": "mcp",
+            "client": "legacy-mcp",
+            "version": "0.4.0",
+            "mode": "unknown",
+            "endpoint": "create",
+            "reason": "too-old",
+        },
+    )
 
     stats = await service.get_stats()
     assert stats.breakdown["agent_requests.client.other"] == 1
     assert stats.breakdown["agent_requests.version.other"] == 1
     assert stats.breakdown["agent_requests.mode.other"] == 1
     assert all("attacker" not in key and "unrecognized" not in key for key in stats.breakdown)
+    assert stats.breakdown["upgrade_required.source.mcp"] == 1
+    assert stats.breakdown["upgrade_required.client.legacy-mcp"] == 1
+    assert stats.breakdown["upgrade_required.client_version.legacy-mcp.0.4.0"] == 1
 
 
 @pytest.mark.asyncio

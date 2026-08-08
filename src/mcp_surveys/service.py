@@ -34,8 +34,8 @@ _STAT_LABEL_RE = re.compile(r"[^a-zA-Z0-9_.-]+")
 _ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v2__"
 _LEGACY_ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v1__"
 _OBSERVABILITY_LABELS = {
-    "source": {"agent", "web", "cli", "other"},
-    "client": {"python-cli", "npx-cli", "web", "legacy-or-unknown", "other"},
+    "source": {"agent", "web", "cli", "mcp", "other"},
+    "client": {"python-cli", "npx-cli", "web", "legacy-mcp", "legacy-or-unknown", "other"},
     "version": {"0.4.0", "0.5.0", "0.5.1", "builtin", "unknown", "other"},
     "mode": {"e2ee_full", "plaintext", "unknown", "other"},
     "endpoint": {"create", "edit", "state", "summary", "answers", "question", "export", "schema", "stats", "other"},
