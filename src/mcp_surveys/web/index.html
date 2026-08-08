@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
-    <meta name="mcp-surveys-agent" content="mcp-surveys/browser/v1" />
+    <meta name="mcp-surveys-agent" content="mcp-surveys/browser/v2" />
     <title>Survey</title>
     <link rel="stylesheet" href="../assets/styles.css" />
   </head>
@@ -25,9 +25,8 @@
         press('[data-mcp-surveys-agent-submit]', 'Enter')
       Wait for bridge.dataset.state === "submitted"; data-result contains the result.
 
-      No browser backend? Fetch /assets/agent.mjs from this link's origin and run:
-        curl -fsS <origin>/assets/agent.mjs | node --input-type=module - '<full-public-url>'
-      Inspect its JSON, then rerun with a compact answers JSON object as the next argument.
+      The standalone no-browser helper is intentionally disabled. Secure E2EE v2
+      must run in this audited page so key and answer-context commitments are checked.
     -->
     <textarea
       data-mcp-surveys-agent-submit

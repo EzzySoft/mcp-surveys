@@ -20,11 +20,11 @@ from mcp_surveys.models import (
 from mcp_surveys.schema import question_schema
 from mcp_surveys.service import SurveyService
 
-MIN_AGENT_VERSION = "0.4.0"
+MIN_AGENT_VERSION = "0.5.1"
 CRITICAL_UPGRADE_MESSAGE = (
     "CRITICAL UPGRADE REQUIRED: this local mcp-surveys client/MCP integration is too old for the secure CLI-first protocol. "
     "Update now with `uvx --refresh-package mcp-surveys-cli mcp-surveys-cli ...` and recreate the survey. "
-    "Secure E2EE surveys require mcp-surveys-cli >= 0.4.0; legacy MCP/plaintext clients are blocked from agent API calls."
+    "Secure E2EE v2 surveys require mcp-surveys-cli >= 0.5.1; legacy MCP/plaintext clients are blocked from agent API calls."
 )
 
 

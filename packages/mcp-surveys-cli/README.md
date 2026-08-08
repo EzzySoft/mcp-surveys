@@ -24,4 +24,4 @@ uvx --refresh-package mcp-surveys-cli mcp-surveys-cli create survey.json --mode 
 
 Use `MCP_SURVEYS_BASE_URL` or `--base-url` to point at a different instance. Outdated-version notices go to stderr and never block the command.
 
-The hosted API also has a server-side critical upgrade gate: agent calls without `x-mcp-surveys-version: 0.4.0+` receive HTTP 426 with an urgent update message. Current CLI commands send anonymous `client/version/mode` headers automatically for observability.
+The hosted API also has a server-side critical upgrade gate: agent calls without `x-mcp-surveys-version: 0.5.1+` receive HTTP 426 with an urgent update message. Current CLI commands send anonymous `client/version/mode` headers automatically for observability. Secure creates use the authenticated E2EE v2 envelope.

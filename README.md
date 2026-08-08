@@ -94,7 +94,7 @@ Agent API calls must identify a current client with:
 
 ```text
 x-mcp-surveys-client: python-cli | npx-cli
-x-mcp-surveys-version: 0.4.0+
+x-mcp-surveys-version: 0.5.1+
 x-mcp-surveys-mode: e2ee_full | plaintext | unknown
 ```
 

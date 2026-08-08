@@ -106,20 +106,35 @@ class Question(ApiModel):
 
 
 class EncryptedBlob(ApiModel):
-    v: int = 1
+    v: Literal[1, 2] = 1
     alg: Literal["A256GCM"] = "A256GCM"
     nonce: str = Field(min_length=1)
     ciphertext: str = Field(min_length=1)
 
 
 class SurveyCrypto(ApiModel):
-    v: int = 1
+    v: Literal[1, 2] = 1
     mode: Literal["e2ee_full"] = "e2ee_full"
+    context_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{43,128}$")
     revision: int = Field(default=1, ge=1)
     spec: EncryptedBlob
     answer_public_key_spki: str = Field(min_length=1)
     question_ids: list[str] = Field(min_length=1, max_length=MAX_SURVEY_QUESTIONS)
     required_question_ids: list[str] = Field(default_factory=list, max_length=MAX_SURVEY_QUESTIONS)
+
+    @model_validator(mode="after")
+    def validate_question_ids(self) -> "SurveyCrypto":
+        if self.spec.v != self.v:
+            raise ValueError("encrypted spec version must match survey crypto version")
+        if self.v == 2 and self.context_id is None:
+            raise ValueError("secure E2EE v2 context_id is required")
+        if self.v == 1 and self.context_id is not None:
+            raise ValueError("legacy E2EE v1 must not define context_id")
+        if len(self.question_ids) != len(set(self.question_ids)):
+            raise ValueError("encrypted question ids must be unique")
+        if set(self.required_question_ids) - set(self.question_ids):
+            raise ValueError("required encrypted question ids must be present in question_ids")
+        return self
 
 
 class AnswerIn(ApiModel):

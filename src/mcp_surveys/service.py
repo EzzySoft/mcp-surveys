@@ -31,7 +31,8 @@ from mcp_surveys.storage import SurveyStore
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 _STAT_LABEL_RE = re.compile(r"[^a-zA-Z0-9_.-]+")
-_ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v1__"
+_ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v2__"
+_LEGACY_ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v1__"
 
 
 def now_utc() -> datetime:
@@ -110,6 +111,8 @@ class SurveyService:
     ) -> CreatedSurvey:
         if len(request.model_dump_json().encode("utf-8")) > self.max_create_survey_bytes:
             raise SurveyValidationError(f"create_survey payload is larger than {self.max_create_survey_bytes} bytes")
+        if isinstance(request, CreateEncryptedSurveyRequest) and request.crypto.v != 2:
+            raise SurveyValidationError("secure E2EE protocol v2 is required; recreate with mcp-surveys-cli >= 0.5.1")
         if self.rate_limiter is not None:
             try:
                 await self.rate_limiter.check_create_survey(client_key)
@@ -333,11 +336,25 @@ class SurveyService:
             raise SurveyValidationError(f"unknown question id: {question_id}")
         if not isinstance(value, dict):
             raise SurveyValidationError("encrypted answer must be an object")
-        if value.get("marker") != _ENCRYPTED_ANSWER_MARKER:
-            raise SurveyValidationError("encrypted answer marker is missing")
-        if value.get("v") != 1 or value.get("alg") != "RSA-OAEP-256+A256GCM":
+        if survey.crypto.v == 1:
+            metadata_matches = (
+                value.get("marker") == _LEGACY_ENCRYPTED_ANSWER_MARKER
+                and value.get("v") == 1
+                and value.get("question_id") == question_id
+                and value.get("revision") == survey.crypto.revision
+            )
+        else:
+            metadata_matches = (
+                value.get("marker") == _ENCRYPTED_ANSWER_MARKER
+                and value.get("v") == 2
+                and value.get("context_id") == survey.crypto.context_id
+                and value.get("survey_id") == survey.id
+                and value.get("question_id") == question_id
+                and value.get("revision") == survey.crypto.revision
+            )
+        if value.get("alg") != "RSA-OAEP-256+A256GCM":
             raise SurveyValidationError("unsupported encrypted answer envelope")
-        if value.get("question_id") != question_id or value.get("revision") != survey.crypto.revision:
+        if not metadata_matches:
             raise SurveyValidationError("encrypted answer metadata does not match the survey")
         for key in ("encrypted_key", "nonce", "ciphertext"):
             if not isinstance(value.get(key), str) or not value[key]:

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from pydantic import ValidationError
 
 from mcp_surveys.errors import RateLimitExceeded, SurveyValidationError
-from mcp_surveys.models import AnswerIn, CreateEncryptedSurveyRequest, CreateSurveyRequest, EncryptedBlob, Option, Question, SurveyCrypto
-from mcp_surveys.service import SurveyService
+from mcp_surveys.models import AnswerIn, CreateEncryptedSurveyRequest, CreateSurveyRequest, EncryptedBlob, Option, Question, Survey, SurveyCrypto, SurveyResponse
+from mcp_surveys.service import SurveyService, now_utc
 
 
 class MemoryStore:
@@ -96,17 +98,20 @@ async def test_create_save_complete_and_read_answers():
 async def test_encrypted_survey_keeps_spec_opaque_and_accepts_encrypted_answers():
     store = MemoryStore()
     service = SurveyService(store, "https://survey.test", 3600, 10800)
+    context_id = "c" * 43
     created = await service.create_survey(
         CreateEncryptedSurveyRequest(
             crypto=SurveyCrypto(
-                spec=EncryptedBlob(nonce="nonce", ciphertext="ciphertext"),
+                v=2,
+                context_id=context_id,
+                spec=EncryptedBlob(v=2, nonce="nonce", ciphertext="ciphertext"),
                 answer_public_key_spki="public-key",
                 question_ids=["q1"],
                 required_question_ids=["q1"],
             )
         ),
         client_key="127.0.0.1",
-        client_info={"client": "python-cli", "version": "0.4.0"},
+        client_info={"client": "python-cli", "version": "0.5.1"},
     )
 
     public = await service.get_public_survey(created.survey_id)
@@ -115,9 +120,11 @@ async def test_encrypted_survey_keeps_spec_opaque_and_accepts_encrypted_answers(
     assert public.total_questions == 1
 
     envelope = {
-        "marker": "__mcp_surveys_encrypted_answer_v1__",
-        "v": 1,
+        "marker": "__mcp_surveys_encrypted_answer_v2__",
+        "v": 2,
         "alg": "RSA-OAEP-256+A256GCM",
+        "context_id": context_id,
+        "survey_id": created.survey_id,
         "question_id": "q1",
         "revision": 1,
         "encrypted_key": "key",
@@ -134,9 +141,68 @@ async def test_encrypted_survey_keeps_spec_opaque_and_accepts_encrypted_answers(
     stats = await service.get_stats()
     assert stats.breakdown["created.mode.e2ee_full"] == 1
     assert stats.breakdown["created.client.python-cli"] == 1
-    assert stats.breakdown["created.version.0.4.0"] == 1
-    assert stats.breakdown["created.client_version_mode.python-cli.0.4.0.e2ee_full"] == 1
+    assert stats.breakdown["created.version.0.5.1"] == 1
+    assert stats.breakdown["created.client_version_mode.python-cli.0.5.1.e2ee_full"] == 1
     assert stats.breakdown["answers_saved.mode.e2ee_full"] == 1
+
+
+@pytest.mark.asyncio
+async def test_new_v1_encrypted_survey_is_rejected_with_upgrade_message():
+    service = SurveyService(MemoryStore(), "https://survey.test", 3600, 10800)
+    legacy_request = CreateEncryptedSurveyRequest(
+        crypto=SurveyCrypto(
+            v=1,
+            spec=EncryptedBlob(v=1, nonce="nonce", ciphertext="ciphertext"),
+            answer_public_key_spki="public-key",
+            question_ids=["q1"],
+            required_question_ids=["q1"],
+        )
+    )
+
+    with pytest.raises(SurveyValidationError, match="secure E2EE protocol v2 is required"):
+        await service.create_survey(legacy_request)
+
+
+@pytest.mark.asyncio
+async def test_persisted_v1_survey_remains_readable_and_accepts_v1_answer():
+    store = MemoryStore()
+    service = SurveyService(store, "https://survey.test", 3600, 10800)
+    created_at = now_utc()
+    legacy = Survey(
+        id="legacy-survey",
+        result_token="legacy-token",
+        title="Private encrypted survey",
+        description="Legacy E2EE v1",
+        questions=[],
+        crypto=SurveyCrypto(
+            v=1,
+            spec=EncryptedBlob(v=1, nonce="nonce", ciphertext="ciphertext"),
+            answer_public_key_spki="public-key",
+            question_ids=["q1"],
+            required_question_ids=["q1"],
+        ),
+        response=SurveyResponse(),
+        created_at=created_at,
+        expires_at=created_at + timedelta(hours=1),
+    )
+    store.items[legacy.id] = legacy
+    envelope = {
+        "marker": "__mcp_surveys_encrypted_answer_v1__",
+        "v": 1,
+        "alg": "RSA-OAEP-256+A256GCM",
+        "question_id": "q1",
+        "revision": 1,
+        "encrypted_key": "key",
+        "nonce": "nonce",
+        "ciphertext": "ciphertext",
+    }
+
+    public = await service.get_public_survey(legacy.id)
+    await service.save_answer(legacy.id, "q1", AnswerIn(value=envelope))
+    answers = await service.get_answers(legacy.id, legacy.result_token)
+
+    assert public.crypto is not None and public.crypto.v == 1
+    assert answers.answers[0].answer == envelope
 
 
 @pytest.mark.asyncio

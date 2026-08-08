@@ -1,4 +1,5 @@
 import { tokenizeLinks, firstUrl } from "./text.mjs";
+import { answerAad, assertPublicSecureMetadata, assertSecureContext, secureProtocolVersion, specAad } from "./secure.mjs";
 
 const surveyId = location.pathname.split("/").filter(Boolean).pop();
 const basePath = location.pathname.includes("/s/") ? location.pathname.split("/s/")[0] : "";
@@ -6,6 +7,7 @@ const agentBridge = document.querySelector('meta[name="mcp-surveys-agent"]');
 const agentInput = document.querySelector("[data-mcp-surveys-agent-submit]");
 const state = {
   survey: null,
+  secure: null,
   answers: new Map(),
 };
 
@@ -55,8 +57,9 @@ function setExpiry(expiresAt) {
 }
 
 function showEmpty() {
-  document.body.innerHTML = "";
-  document.body.append(document.getElementById("empty-template").content.cloneNode(true));
+  const template = document.getElementById("empty-template");
+  const content = template?.content.cloneNode(true);
+  document.body.replaceChildren(...(content ? [content] : []));
 }
 
 async function api(path, options = {}) {
@@ -64,7 +67,7 @@ async function api(path, options = {}) {
     "content-type": "application/json",
     "x-mcp-surveys-source": "web",
     "x-mcp-surveys-client": "web",
-    "x-mcp-surveys-version": "0.4.0",
+    "x-mcp-surveys-version": "0.5.1",
     ...(options.headers || {}),
   };
   const response = await fetch(path, { ...options, headers });
@@ -101,14 +104,23 @@ async function decryptSecureSurvey() {
   const key = await crypto.subtle.importKey("raw", base64UrlToBytes(keyText), "AES-GCM", false, ["decrypt"]);
   const spec = state.survey.crypto.spec;
   const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: base64UrlToBytes(spec.nonce) },
+    { name: "AES-GCM", iv: base64UrlToBytes(spec.nonce), additionalData: specAad() },
     key,
     base64UrlToBytes(spec.ciphertext),
   );
   const decoded = JSON.parse(new TextDecoder().decode(plaintext));
-  state.survey.title = decoded.title;
-  state.survey.description = decoded.description || "";
-  state.survey.questions = decoded.questions || [];
+  const authenticated = assertSecureContext(decoded, state.survey.crypto);
+  const publicKey = await crypto.subtle.importKey(
+    "spki",
+    base64UrlToBytes(authenticated.context.answer_public_key_spki),
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    false,
+    ["encrypt"],
+  );
+  state.secure = Object.freeze({ ...authenticated.context, survey_id: surveyId, publicKey });
+  state.survey.title = authenticated.survey.title;
+  state.survey.description = authenticated.survey.description || "";
+  state.survey.questions = authenticated.survey.questions || [];
 }
 
 async function encryptSecureAnswer(question, value, customOptions = {}) {
@@ -116,26 +128,32 @@ async function encryptSecureAnswer(question, value, customOptions = {}) {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const aesKey = await crypto.subtle.importKey("raw", answerKey, "AES-GCM", false, ["encrypt"]);
   const plaintext = new TextEncoder().encode(JSON.stringify({
+    v: secureProtocolVersion,
+    context_id: state.secure.context_id,
+    survey_id: state.secure.survey_id,
     question_id: question.id,
-    revision: state.survey.crypto.revision,
+    revision: state.secure.revision,
     value,
     custom_options: customOptions,
   }));
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, plaintext);
-  const publicKey = await crypto.subtle.importKey(
-    "spki",
-    base64UrlToBytes(state.survey.crypto.answer_public_key_spki),
-    { name: "RSA-OAEP", hash: "SHA-256" },
-    false,
-    ["encrypt"],
+  const ciphertext = await crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv: nonce,
+      additionalData: answerAad(state.secure.context_id, state.secure.survey_id, state.secure.revision, question.id),
+    },
+    aesKey,
+    plaintext,
   );
-  const encryptedKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, answerKey);
+  const encryptedKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, state.secure.publicKey, answerKey);
   return {
-    marker: "__mcp_surveys_encrypted_answer_v1__",
-    v: 1,
+    marker: "__mcp_surveys_encrypted_answer_v2__",
+    v: secureProtocolVersion,
     alg: "RSA-OAEP-256+A256GCM",
+    context_id: state.secure.context_id,
+    survey_id: state.secure.survey_id,
     question_id: question.id,
-    revision: state.survey.crypto.revision,
+    revision: state.secure.revision,
     encrypted_key: bytesToBase64Url(new Uint8Array(encryptedKey)),
     nonce: bytesToBase64Url(nonce),
     ciphertext: bytesToBase64Url(new Uint8Array(ciphertext)),
@@ -157,10 +175,14 @@ async function save(question, value, customOptions = {}, throwOnError = false) {
     const body = isSecureSurvey()
       ? { value: await encryptSecureAnswer(question, value, customOptions), custom_options: {} }
       : { value, custom_options: customOptions };
-    state.survey = await api(`${basePath}/api/surveys/${surveyId}/answers/${question.id}`, {
+    const responseSurvey = await api(`${basePath}/api/surveys/${surveyId}/answers/${question.id}`, {
       method: "PUT",
       body: JSON.stringify(body),
     });
+    if (decrypted) {
+      assertPublicSecureMetadata(responseSurvey.crypto, state.secure, surveyId, responseSurvey.id);
+    }
+    state.survey = responseSurvey;
     if (decrypted) Object.assign(state.survey, decrypted);
     setStatus("Saved");
     renderProgress();
@@ -688,7 +710,7 @@ async function complete(throwOnError = false) {
 
 function agentSnapshot() {
   return {
-    protocol: "mcp-surveys/browser/v1",
+    protocol: "mcp-surveys/browser/v2",
     id: state.survey.id,
     title: state.survey.title,
     description: state.survey.description || "",
@@ -756,6 +778,7 @@ agentInput.addEventListener("keydown", async (event) => {
 async function boot() {
   try {
     state.survey = await api(`${basePath}/api/surveys/${surveyId}`);
+    if (state.survey.id !== surveyId) throw new Error("survey id mismatch");
     if (isSecureSurvey()) await decryptSecureSurvey();
     if (state.survey.completed_at) {
       $("complete").disabled = true;
