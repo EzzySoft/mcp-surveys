@@ -86,8 +86,12 @@ jobs:
           fi
 
           compose=(docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml)
-          if ! "${compose[@]}" up -d --build --wait --wait-timeout 180; then
-            "${compose[@]}" logs --no-color --tail=100 app
+          if ! "${compose[@]}" up -d --no-recreate --wait --wait-timeout 60 redis; then
+            "${compose[@]}" logs --no-color --tail=100 redis
+            exit 1
+          fi
+          if ! "${compose[@]}" up -d --build --no-deps --wait --wait-timeout 180 app; then
+            "${compose[@]}" logs --no-color --tail=100 app redis
             exit 1
           fi
 

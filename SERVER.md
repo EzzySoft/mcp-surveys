@@ -28,7 +28,8 @@ Before updating, review upstream changes. Tests run on the GitHub Actions runner
 git fetch origin main
 git diff HEAD..origin/main -- README.md pyproject.toml Dockerfile compose.yaml src/ packages/ skills/
 git pull --ff-only
-docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml up -d --build --wait --wait-timeout 180
+docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml up -d --no-recreate --wait --wait-timeout 60 redis
+docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml up -d --build --no-deps --wait --wait-timeout 180 app
 curl --noproxy '*' -fsS http://127.0.0.1:18173/health
 curl --noproxy '*' -fsS https://mcp.voevoda-sailing.ru/health
 uv tool upgrade mcp-surveys-cli
