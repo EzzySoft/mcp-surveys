@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from mcp_surveys.api import api_router, http_error
@@ -110,6 +110,12 @@ def create_app() -> FastAPI:
             },
             status_code=426,
         )
+
+    @app.get("/s/{survey_id}", include_in_schema=False)
+    async def survey_page(survey_id: str):
+        # Keep the public survey route explicit instead of relying on static
+        # fallback behavior, which can differ between fastapi-frontend builds.
+        return FileResponse(WEB_DIR / "index.html", media_type="text/html")
 
     app.frontend("/", directory=str(WEB_DIR), fallback="index.html")
 

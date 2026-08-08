@@ -90,11 +90,22 @@ def test_cli_create_secure_encrypts_payload_and_writes_receipt(monkeypatch, tmp_
     assert headers["x-mcp-surveys-version"] == cli.VERSION
     assert headers["x-mcp-surveys-mode"] == "e2ee_full"
     assert body["crypto"]["mode"] == "e2ee_full"
+    assert body["crypto"]["v"] == 2
+    assert body["crypto"]["spec"]["v"] == 2
     assert "Lunch" not in serialized_body
     assert "Ramen" not in serialized_body
     receipt = json.loads(Path(out["receipt_path"]).read_text(encoding="utf-8"))
+    assert receipt["v"] == 2
     assert receipt["result_token"] == "tok"
     assert receipt["survey"]["title"] == "Lunch"
+    decoded = secure.decrypt_json(
+        body["crypto"]["spec"],
+        secure.b64url_decode(receipt["view_key"]),
+        additional_data=secure.spec_aad(),
+    )
+    assert decoded["marker"] == "__mcp_surveys_encrypted_spec_v2__"
+    assert decoded["context"]["context_id"] == body["crypto"]["context_id"]
+    assert decoded["survey"] == receipt["survey"]
 
 
 def test_secure_receipt_decrypts_answer_envelope():
@@ -109,33 +120,50 @@ def test_secure_receipt_decrypts_answer_envelope():
         ],
     }
     body, receipt = secure.encrypted_create_body(payload)
+    survey_id = "s1"
+    question_id = "where"
+    receipt["survey_id"] = survey_id
     answer_key = secrets.token_bytes(32)
     nonce = secrets.token_bytes(12)
     answer_plaintext = json.dumps(
-        {"question_id": "where", "revision": 1, "value": "ramen", "custom_options": {}},
+        {
+            "v": 2,
+            "context_id": receipt["context_id"],
+            "survey_id": survey_id,
+            "question_id": question_id,
+            "revision": receipt["revision"],
+            "value": "ramen",
+            "custom_options": {},
+        },
         separators=(",", ":"),
     ).encode("utf-8")
-    ciphertext = AESGCM(answer_key).encrypt(nonce, answer_plaintext, None)
+    ciphertext = AESGCM(answer_key).encrypt(
+        nonce,
+        answer_plaintext,
+        secure.answer_aad(receipt["context_id"], survey_id, receipt["revision"], question_id),
+    )
     public_key = serialization.load_der_public_key(secure.b64url_decode(body["crypto"]["answer_public_key_spki"]))
     encrypted_key = public_key.encrypt(
         answer_key,
         padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
     )
     encrypted_response = {
-        "survey_id": "s1",
+        "survey_id": survey_id,
         "title": "Private encrypted survey",
         "summary": {"status": "completed"},
         "answers": [
             {
-                "question_id": "where",
+                "question_id": question_id,
                 "answered": True,
                 "answered_at": "2030-01-01T00:00:00Z",
                 "answer": {
                     "marker": secure.ENCRYPTED_ANSWER_MARKER,
-                    "v": 1,
+                    "v": 2,
                     "alg": "RSA-OAEP-256+A256GCM",
-                    "question_id": "where",
-                    "revision": 1,
+                    "context_id": receipt["context_id"],
+                    "survey_id": survey_id,
+                    "question_id": question_id,
+                    "revision": receipt["revision"],
                     "encrypted_key": secure.b64url_encode(encrypted_key),
                     "nonce": secure.b64url_encode(nonce),
                     "ciphertext": secure.b64url_encode(ciphertext),
@@ -148,6 +176,90 @@ def test_secure_receipt_decrypts_answer_envelope():
 
     assert decrypted["title"] == "Lunch"
     assert decrypted["answers"][0]["answer"] == {"id": "ramen", "text": "Ramen"}
+
+    forged_survey_id = "s2"
+    forged_plaintext = {
+        **json.loads(answer_plaintext),
+        "survey_id": forged_survey_id,
+    }
+    forged_nonce = secrets.token_bytes(12)
+    forged_ciphertext = AESGCM(answer_key).encrypt(
+        forged_nonce,
+        json.dumps(forged_plaintext, separators=(",", ":")).encode("utf-8"),
+        secure.answer_aad(receipt["context_id"], forged_survey_id, receipt["revision"], question_id),
+    )
+    forged_envelope = {
+        **encrypted_response["answers"][0]["answer"],
+        "survey_id": forged_survey_id,
+        "nonce": secure.b64url_encode(forged_nonce),
+        "ciphertext": secure.b64url_encode(forged_ciphertext),
+    }
+    forged_response = {
+        **encrypted_response,
+        "survey_id": forged_survey_id,
+        "answers": [{**encrypted_response["answers"][0], "answer": forged_envelope}],
+    }
+    with pytest.raises(ValueError, match="receipt survey id does not match"):
+        secure.decrypt_answers_response(forged_response, receipt)
+
+
+def test_legacy_receipt_rejects_ciphertext_swapped_between_questions():
+    private_key_pem, public_key_spki = secure.generate_rsa_keypair()
+    answer_key = secrets.token_bytes(32)
+    nonce = secrets.token_bytes(12)
+    plaintext = json.dumps(
+        {
+            "marker": secure.LEGACY_ENCRYPTED_ANSWER_MARKER,
+            "question_id": "q2",
+            "value": "swapped",
+            "custom_options": {},
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    ciphertext = AESGCM(answer_key).encrypt(nonce, plaintext, None)
+    public_key = serialization.load_der_public_key(secure.b64url_decode(public_key_spki))
+    encrypted_key = public_key.encrypt(
+        answer_key,
+        padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
+    )
+    receipt = {
+        "v": 1,
+        "survey_id": "s1",
+        "answer_private_key_pem": private_key_pem,
+        "survey": {
+            "title": "Legacy",
+            "description": "",
+            "questions": [
+                {"id": "q1", "type": "text", "prompt": "One?", "required": True},
+                {"id": "q2", "type": "text", "prompt": "Two?", "required": True},
+            ],
+        },
+    }
+    response = {
+        "survey_id": "s1",
+        "title": "Private encrypted survey",
+        "summary": {"status": "completed"},
+        "answers": [
+            {
+                "question_id": "q1",
+                "answered": True,
+                "answered_at": "2030-01-01T00:00:00Z",
+                "answer": {
+                    "marker": secure.LEGACY_ENCRYPTED_ANSWER_MARKER,
+                    "v": 1,
+                    "alg": "RSA-OAEP-256+A256GCM",
+                    "question_id": "q1",
+                    "revision": 1,
+                    "encrypted_key": secure.b64url_encode(encrypted_key),
+                    "nonce": secure.b64url_encode(nonce),
+                    "ciphertext": secure.b64url_encode(ciphertext),
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="decrypted answer question id does not match"):
+        secure.decrypt_answers_response(response, receipt)
 
 
 def test_cli_reports_request_errors(monkeypatch, capsys):

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from mcp_surveys import __version__ as server_version
 from mcp_surveys.api import api_router
 from mcp_surveys.app import create_app
 from mcp_surveys.service import SurveyService
@@ -13,9 +15,14 @@ from mcp_surveys.service import SurveyService
 AGENT_HEADERS = {
     "x-mcp-surveys-source": "cli",
     "x-mcp-surveys-client": "python-cli",
-    "x-mcp-surveys-version": "0.4.0",
+    "x-mcp-surveys-version": "0.5.1",
     "x-mcp-surveys-mode": "plaintext",
 }
+
+
+def test_server_runtime_version_matches_project_metadata():
+    project = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+    assert server_version == project["project"]["version"]
 
 
 class MemoryStore:
@@ -108,6 +115,19 @@ def test_agent_api_blocks_stale_clients_and_records_upgrade_metric():
     assert stats["breakdown"]["upgrade_required.client.legacy-or-unknown"] == 1
 
 
+def test_agent_api_blocks_pre_v2_cli():
+    service = SurveyService(MemoryStore(), "https://survey.test", 3600, 10800)
+    app = FastAPI()
+    app.include_router(api_router(service))
+    client = TestClient(app)
+    headers = {**AGENT_HEADERS, "x-mcp-surveys-version": "0.5.0"}
+
+    response = client.get("/api/agent/question-schema", headers=headers)
+
+    assert response.status_code == 426
+    assert "mcp-surveys-cli >= 0.5.1" in response.json()["detail"]
+
+
 def test_app_remote_mcp_endpoint_is_gone(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/15")
     client = TestClient(create_app())
@@ -119,6 +139,17 @@ def test_app_remote_mcp_endpoint_is_gone(monkeypatch):
     assert "mcp-surveys-cli" in response.json()["detail"]
 
 
+def test_app_serves_explicit_survey_page(monkeypatch):
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/15")
+    client = TestClient(create_app())
+
+    response = client.get("/s/survey-id")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert 'content="mcp-surveys/browser/v2"' in response.text
+
+
 def test_public_page_advertises_hidden_browser_agent_api():
     web = Path(__file__).parents[1] / "src" / "mcp_surveys" / "web"
     html = (web / "index.html").read_text(encoding="utf-8")
@@ -126,7 +157,8 @@ def test_public_page_advertises_hidden_browser_agent_api():
 
     assert "AI agent? Skip the human UI" in html
     assert 'meta name="mcp-surveys-agent"' in html
-    assert "/assets/agent.mjs" in html
+    assert 'content="mcp-surveys/browser/v2"' in html
+    assert "standalone no-browser helper is intentionally disabled" in html
     assert "await window.mcpSurveys.read()" in html
     assert "await window.mcpSurveys.submit" in html
     assert "data-mcp-surveys-agent-submit" in html

@@ -13,7 +13,11 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
-ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v1__"
+PROTOCOL_VERSION = 2
+CONTEXT_PROTOCOL = "mcp-surveys/e2ee/v2"
+ENCRYPTED_SPEC_MARKER = "__mcp_surveys_encrypted_spec_v2__"
+ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v2__"
+LEGACY_ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v1__"
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -66,18 +70,35 @@ def normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def encrypt_json(value: dict[str, Any], key: bytes | None = None) -> tuple[bytes, dict[str, str]]:
+def spec_aad() -> bytes:
+    return b"mcp-surveys/spec/v2"
+
+
+def answer_aad(context_id: str, survey_id: str, revision: int, question_id: str) -> bytes:
+    return json.dumps(
+        ["mcp-surveys/answer/v2", context_id, survey_id, revision, question_id],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def encrypt_json(
+    value: dict[str, Any],
+    key: bytes | None = None,
+    additional_data: bytes | None = None,
+    version: int = PROTOCOL_VERSION,
+) -> tuple[bytes, dict[str, str]]:
     aes_key = key or secrets.token_bytes(32)
     nonce = secrets.token_bytes(12)
     plaintext = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    ciphertext = AESGCM(aes_key).encrypt(nonce, plaintext, None)
-    return aes_key, {"v": 1, "alg": "A256GCM", "nonce": b64url_encode(nonce), "ciphertext": b64url_encode(ciphertext)}
+    ciphertext = AESGCM(aes_key).encrypt(nonce, plaintext, additional_data)
+    return aes_key, {"v": version, "alg": "A256GCM", "nonce": b64url_encode(nonce), "ciphertext": b64url_encode(ciphertext)}
 
 
-def decrypt_json(blob: dict[str, Any], key: bytes) -> dict[str, Any]:
+def decrypt_json(blob: dict[str, Any], key: bytes, additional_data: bytes | None = None) -> dict[str, Any]:
     if blob.get("alg") != "A256GCM":
         raise ValueError("unsupported encrypted blob")
-    plaintext = AESGCM(key).decrypt(b64url_decode(blob["nonce"]), b64url_decode(blob["ciphertext"]), None)
+    plaintext = AESGCM(key).decrypt(b64url_decode(blob["nonce"]), b64url_decode(blob["ciphertext"]), additional_data)
     value = json.loads(plaintext.decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError("encrypted JSON is not an object")
@@ -100,14 +121,33 @@ def generate_rsa_keypair() -> tuple[str, str]:
 
 def encrypted_create_body(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     normalized = normalize_payload(payload)
-    view_key, encrypted_spec = encrypt_json(normalized)
     private_key_pem, public_key_spki = generate_rsa_keypair()
+    context_id = b64url_encode(secrets.token_bytes(32))
     question_ids = [question["id"] for question in normalized["questions"]]
     required_question_ids = [question["id"] for question in normalized["questions"] if question.get("required", True)]
+    context = {
+        "protocol": CONTEXT_PROTOCOL,
+        "mode": "e2ee_full",
+        "context_id": context_id,
+        "revision": 1,
+        "answer_public_key_spki": public_key_spki,
+        "question_ids": question_ids,
+        "required_question_ids": required_question_ids,
+    }
+    view_key, encrypted_spec = encrypt_json(
+        {
+            "marker": ENCRYPTED_SPEC_MARKER,
+            "v": PROTOCOL_VERSION,
+            "context": context,
+            "survey": normalized,
+        },
+        additional_data=spec_aad(),
+    )
     body = {
         "crypto": {
-            "v": 1,
+            "v": PROTOCOL_VERSION,
             "mode": "e2ee_full",
+            "context_id": context_id,
             "revision": 1,
             "spec": encrypted_spec,
             "answer_public_key_spki": public_key_spki,
@@ -116,8 +156,13 @@ def encrypted_create_body(payload: dict[str, Any]) -> tuple[dict[str, Any], dict
         }
     }
     receipt = {
-        "v": 1,
+        "v": PROTOCOL_VERSION,
+        "protocol": CONTEXT_PROTOCOL,
         "mode": "e2ee_full",
+        "context_id": context_id,
+        "revision": 1,
+        "question_ids": question_ids,
+        "required_question_ids": required_question_ids,
         "view_key": b64url_encode(view_key),
         "answer_private_key_pem": private_key_pem,
         "survey": normalized,
@@ -160,18 +205,53 @@ def load_receipt(survey_id: str, path: str | None = None) -> dict[str, Any]:
     return value
 
 
-def decrypt_answer(envelope: dict[str, Any], private_key_pem: str) -> dict[str, Any]:
-    if envelope.get("marker") != ENCRYPTED_ANSWER_MARKER:
+def decrypt_answer(
+    envelope: dict[str, Any],
+    private_key_pem: str,
+    *,
+    context_id: str | None = None,
+    survey_id: str | None = None,
+    question_id: str | None = None,
+    revision: int | None = None,
+) -> dict[str, Any]:
+    marker = envelope.get("marker")
+    if marker not in {ENCRYPTED_ANSWER_MARKER, LEGACY_ENCRYPTED_ANSWER_MARKER}:
         raise ValueError("answer is not an encrypted mcp-surveys envelope")
     private_key = serialization.load_pem_private_key(private_key_pem.encode("ascii"), password=None)
     answer_key = private_key.decrypt(
         b64url_decode(envelope["encrypted_key"]),
         padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
     )
-    plaintext = AESGCM(answer_key).decrypt(b64url_decode(envelope["nonce"]), b64url_decode(envelope["ciphertext"]), None)
+    additional_data = None
+    if marker == ENCRYPTED_ANSWER_MARKER:
+        expected = {
+            "v": PROTOCOL_VERSION,
+            "context_id": context_id,
+            "survey_id": survey_id,
+            "question_id": question_id,
+            "revision": revision,
+        }
+        if any(value is None or envelope.get(field) != value for field, value in expected.items()):
+            raise ValueError("encrypted answer context does not match the receipt")
+        additional_data = answer_aad(context_id, survey_id, revision, question_id)
+    plaintext = AESGCM(answer_key).decrypt(
+        b64url_decode(envelope["nonce"]),
+        b64url_decode(envelope["ciphertext"]),
+        additional_data,
+    )
     value = json.loads(plaintext.decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError("decrypted answer is not an object")
+    if marker == ENCRYPTED_ANSWER_MARKER:
+        expected = {
+            "v": PROTOCOL_VERSION,
+            "context_id": context_id,
+            "survey_id": survey_id,
+            "question_id": question_id,
+            "revision": revision,
+        }
+        if any(value.get(field) != expected_value for field, expected_value in expected.items()):
+            raise ValueError("decrypted answer context does not match the receipt")
     return value
 
 
@@ -217,6 +297,9 @@ def resolve_answer(question: dict[str, Any], answer: dict[str, Any]) -> Any:
 
 def decrypt_answers_response(encrypted_response: dict[str, Any], receipt: dict[str, Any]) -> dict[str, Any]:
     survey = receipt["survey"]
+    receipt_version = receipt.get("v", 1)
+    if receipt_version == PROTOCOL_VERSION and encrypted_response.get("survey_id") != receipt.get("survey_id"):
+        raise ValueError("receipt survey id does not match the encrypted response")
     questions = {question["id"]: question for question in survey["questions"]}
     result_answers: list[dict[str, Any]] = []
     for item in encrypted_response.get("answers") or []:
@@ -234,7 +317,16 @@ def decrypt_answers_response(encrypted_response: dict[str, Any], receipt: dict[s
                 }
             )
             continue
-        decrypted = decrypt_answer(item["answer"], receipt["answer_private_key_pem"])
+        decrypted = decrypt_answer(
+            item["answer"],
+            receipt["answer_private_key_pem"],
+            context_id=receipt.get("context_id"),
+            survey_id=encrypted_response.get("survey_id"),
+            question_id=question_id,
+            revision=receipt.get("revision"),
+        )
+        if decrypted.get("question_id") != question_id:
+            raise ValueError("decrypted answer question id does not match the response item")
         result_answers.append(
             {
                 "question_id": question_id,
