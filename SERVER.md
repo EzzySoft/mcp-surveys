@@ -22,14 +22,12 @@ docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml logs --no-c
 docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml down
 ```
 
-Before updating, review upstream changes. Then use a fast-forward-only pull, run tests, rebuild, and verify both health endpoints:
+Before updating, review upstream changes. Tests run on the GitHub Actions runner before the SSH deployment. For a manual deployment, use a fast-forward-only pull, rebuild, and verify both health endpoints:
 
 ```bash
 git fetch origin main
 git diff HEAD..origin/main -- README.md pyproject.toml Dockerfile compose.yaml src/ packages/ skills/
 git pull --ff-only
-uv sync --extra dev --frozen
-uv run pytest -q
 docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml up -d --build --wait --wait-timeout 180
 curl --noproxy '*' -fsS http://127.0.0.1:18173/health
 curl --noproxy '*' -fsS https://mcp.voevoda-sailing.ru/health

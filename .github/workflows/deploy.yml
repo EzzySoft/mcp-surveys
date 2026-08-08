@@ -15,6 +15,19 @@ jobs:
       contents: read
 
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify server
+        run: |
+          set -euo pipefail
+          python -m pip install uv
+          uv sync --extra dev --frozen
+          uv run pytest -q
+
       - name: Prepare SSH
         env:
           SSH_HOST: ${{ secrets.CLAW_SSH_HOST }}
@@ -59,8 +72,6 @@ jobs:
           fi
 
           git pull --ff-only origin main
-          uv sync --extra dev --frozen
-          uv run pytest -q
 
           compose=(docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml)
           if ! "${compose[@]}" up -d --build --wait --wait-timeout 180; then
