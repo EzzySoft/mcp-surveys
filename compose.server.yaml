@@ -1,0 +1,50 @@
+services:
+  app:
+    init: true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 384m
+    cpus: 1.0
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - "import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:8000/health', timeout=2).read()"
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - frontend
+      - backend
+
+  redis:
+    user: redis:redis
+    read_only: true
+    tmpfs:
+      - /data:rw,noexec,nosuid,nodev,size=32m,mode=1777
+      - /tmp:rw,noexec,nosuid,nodev,size=8m,mode=1777
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - backend
+
+networks:
+  frontend: {}
+  backend:
+    internal: true

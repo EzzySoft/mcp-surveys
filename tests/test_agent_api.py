@@ -36,6 +36,11 @@ class MemoryStore:
     async def save(self, survey, ttl_seconds):
         self.items[survey.id] = survey
 
+    async def update(self, survey_id, mutate):
+        survey = self.items[survey_id]
+        mutate(survey)
+        return survey
+
     async def increment_stat(self, name):
         self.stats[name] = self.stats.get(name, 0) + 1
 

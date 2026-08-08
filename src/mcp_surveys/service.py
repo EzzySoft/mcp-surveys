@@ -33,6 +33,14 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 _STAT_LABEL_RE = re.compile(r"[^a-zA-Z0-9_.-]+")
 _ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v2__"
 _LEGACY_ENCRYPTED_ANSWER_MARKER = "__mcp_surveys_encrypted_answer_v1__"
+_OBSERVABILITY_LABELS = {
+    "source": {"agent", "web", "cli", "mcp", "other"},
+    "client": {"python-cli", "npx-cli", "web", "legacy-mcp", "legacy-or-unknown", "other"},
+    "version": {"0.4.0", "0.5.0", "0.5.1", "builtin", "unknown", "other"},
+    "mode": {"e2ee_full", "plaintext", "unknown", "other"},
+    "endpoint": {"create", "edit", "state", "summary", "answers", "question", "export", "schema", "stats", "other"},
+    "reason": {"missing-version", "too-old", "other"},
+}
 
 
 def now_utc() -> datetime:
@@ -173,21 +181,23 @@ class SurveyService:
         return self._public_survey(survey)
 
     async def save_answer(self, survey_id: str, question_id: str, answer: AnswerIn, client_info: dict[str, str] | None = None) -> PublicSurvey:
-        survey = await self.store.get(survey_id)
-        if survey.response.completed_at:
-            raise SurveyLocked("survey is already completed")
-        if survey.crypto is not None:
-            self._validate_encrypted_answer(survey, question_id, answer.value)
-        else:
-            question = self._question(survey, question_id)
-            self._validate_answer(question, answer)
-        survey.response.answers[question_id] = StoredAnswer(
-            value=answer.value,
-            custom_options={} if survey.crypto is not None else answer.custom_options,
-            answered_at=now_utc(),
-        )
-        survey.interactions += 1
-        await self.store.save(survey, self._ttl_for(survey))
+        def mutate(survey: Survey) -> int:
+            if survey.response.completed_at:
+                raise SurveyLocked("survey is already completed")
+            if survey.crypto is not None:
+                self._validate_encrypted_answer(survey, question_id, answer.value)
+            else:
+                question = self._question(survey, question_id)
+                self._validate_answer(question, answer)
+            survey.response.answers[question_id] = StoredAnswer(
+                value=answer.value,
+                custom_options={} if survey.crypto is not None else answer.custom_options,
+                answered_at=now_utc(),
+            )
+            survey.interactions += 1
+            return self._ttl_for(survey)
+
+        survey = await self.store.update(survey_id, mutate)
         await self.record_event(
             "answers_saved",
             {
@@ -199,12 +209,25 @@ class SurveyService:
         return self._public_survey(survey)
 
     async def complete_survey(self, survey_id: str, client_info: dict[str, str] | None = None) -> SurveySummary:
-        survey = await self.store.get(survey_id)
-        if not survey.response.completed_at:
+        newly_completed = False
+
+        def mutate(survey: Survey) -> int:
+            nonlocal newly_completed
+            newly_completed = False
+            if survey.response.completed_at:
+                return self._ttl_for(survey)
+            _, required_answered = self._counts(survey)
+            required_total = self._total_required_questions(survey)
+            if required_answered != required_total:
+                raise SurveyValidationError(f"all required questions must be answered ({required_answered}/{required_total})")
             completed_at = now_utc()
             survey.response.completed_at = completed_at
             survey.expires_at = completed_at + timedelta(seconds=self.completed_ttl_seconds)
-            await self.store.save(survey, self.completed_ttl_seconds)
+            newly_completed = True
+            return self.completed_ttl_seconds
+
+        survey = await self.store.update(survey_id, mutate)
+        if newly_completed:
             await self.record_event(
                 "completed",
                 {
@@ -216,19 +239,23 @@ class SurveyService:
         return self._summary(survey)
 
     async def edit_survey(self, survey_id: str, result_token: str, patch: SurveyPatch) -> PublicSurvey:
-        survey = await self._get_for_agent(survey_id, result_token)
-        if survey.crypto is not None:
-            raise SurveyValidationError("encrypted surveys must be recreated by the CLI instead of edited on the server")
-        if survey.response.completed_at:
-            raise SurveyLocked("completed surveys cannot be edited")
-        if patch.title is not None:
-            survey.title = patch.title
-        if patch.description is not None:
-            survey.description = patch.description
-        if patch.questions is not None:
-            survey.questions = normalize_questions(patch.questions)
-            survey.response.answers = self._preserve_valid_answers(survey)
-        await self.store.save(survey, self._ttl_for(survey))
+        def mutate(survey: Survey) -> int:
+            if not secrets.compare_digest(survey.result_token, result_token):
+                raise SurveyForbidden("invalid result token")
+            if survey.crypto is not None:
+                raise SurveyValidationError("encrypted surveys must be recreated by the CLI instead of edited on the server")
+            if survey.response.completed_at:
+                raise SurveyLocked("completed surveys cannot be edited")
+            if patch.title is not None:
+                survey.title = patch.title
+            if patch.description is not None:
+                survey.description = patch.description
+            if patch.questions is not None:
+                survey.questions = normalize_questions(patch.questions)
+                survey.response.answers = self._preserve_valid_answers(survey)
+            return self._ttl_for(survey)
+
+        survey = await self.store.update(survey_id, mutate)
         return self._public_survey(survey)
 
     async def get_survey(self, survey_id: str, result_token: str) -> PublicSurvey:
@@ -286,7 +313,11 @@ class SurveyService:
 
     async def _increment_observability(self, event: str, labels: dict[str, str]) -> None:
         safe_event = self._stat_label(event)
-        safe_labels = {self._stat_label(key): self._stat_label(value) for key, value in labels.items() if value}
+        safe_labels = {
+            key: self._bounded_label(key, value)
+            for key, value in labels.items()
+            if value and key in _OBSERVABILITY_LABELS
+        }
         for key, value in safe_labels.items():
             await self.store.increment_stat(f"{safe_event}.{key}.{value}")
         client = safe_labels.get("client")
@@ -296,6 +327,11 @@ class SurveyService:
             await self.store.increment_stat(f"{safe_event}.client_version.{client}.{version}")
         if client and version and mode:
             await self.store.increment_stat(f"{safe_event}.client_version_mode.{client}.{version}.{mode}")
+
+    @classmethod
+    def _bounded_label(cls, key: str, value: str) -> str:
+        safe_value = cls._stat_label(value)
+        return safe_value if safe_value in _OBSERVABILITY_LABELS[key] else "other"
 
     @staticmethod
     def _stat_label(value: str) -> str:
@@ -356,6 +392,21 @@ class SurveyService:
             raise SurveyValidationError("unsupported encrypted answer envelope")
         if not metadata_matches:
             raise SurveyValidationError("encrypted answer metadata does not match the survey")
+        if survey.crypto.v == 2:
+            allowed_fields = {
+                "marker",
+                "v",
+                "alg",
+                "context_id",
+                "survey_id",
+                "question_id",
+                "revision",
+                "encrypted_key",
+                "nonce",
+                "ciphertext",
+            }
+            if set(value) != allowed_fields:
+                raise SurveyValidationError("encrypted answer envelope has missing or unknown fields")
         for key in ("encrypted_key", "nonce", "ciphertext"):
             if not isinstance(value.get(key), str) or not value[key]:
                 raise SurveyValidationError(f"encrypted answer {key} is required")

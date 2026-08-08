@@ -15,6 +15,19 @@ jobs:
       contents: read
 
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify server
+        run: |
+          set -euo pipefail
+          python -m pip install uv
+          uv sync --extra dev --frozen
+          uv run pytest -q
+
       - name: Prepare SSH
         env:
           SSH_HOST: ${{ secrets.CLAW_SSH_HOST }}
@@ -42,20 +55,49 @@ jobs:
           test -n "$SSH_USER"
           SSH_PORT="${SSH_PORT:-22}"
 
-          ssh -i ~/.ssh/claw_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" <<'REMOTE'
+          ssh -i ~/.ssh/claw_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" bash -s -- "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
-          cd ~/mcp-surveys
-          git pull --ff-only origin main
-          docker compose up -d --build
-          docker compose ps
-          for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18173/health; then
-              echo
-              exit 0
-            fi
-            echo "Waiting for app health check, attempt ${attempt}/30"
-            sleep 2
-          done
-          docker compose logs --no-color --tail=100 app
-          exit 1
+          expected_sha=$1
+          cd "$HOME/.local/share/mcp-surveys"
+
+          if [ "$(git branch --show-current)" != "main" ]; then
+            echo "Refusing to deploy from a branch other than main" >&2
+            git status --short --branch >&2
+            exit 1
+          fi
+
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Refusing to deploy over production changes" >&2
+            git status --short >&2
+            exit 1
+          fi
+
+          git fetch --no-tags origin main
+          remote_sha=$(git rev-parse origin/main)
+          if [ "$remote_sha" != "$expected_sha" ]; then
+            echo "Refusing to deploy: origin/main $remote_sha does not match workflow $expected_sha" >&2
+            exit 1
+          fi
+          git merge --ff-only "$expected_sha"
+          deployed_sha=$(git rev-parse HEAD)
+          if [ "$deployed_sha" != "$expected_sha" ]; then
+            echo "Refusing to deploy unreviewed HEAD $deployed_sha (expected $expected_sha)" >&2
+            exit 1
+          fi
+
+          compose=(docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml)
+          if ! "${compose[@]}" up -d --no-recreate --wait --wait-timeout 60 redis; then
+            "${compose[@]}" logs --no-color --tail=100 redis
+            exit 1
+          fi
+          if ! "${compose[@]}" up -d --build --no-deps --wait --wait-timeout 180 app; then
+            "${compose[@]}" logs --no-color --tail=100 app redis
+            exit 1
+          fi
+
+          "${compose[@]}" ps
+          curl --noproxy '*' -fsS http://127.0.0.1:18173/health
+          echo
+          curl --noproxy '*' -fsS https://mcp.voevoda-sailing.ru/health
+          echo
           REMOTE
