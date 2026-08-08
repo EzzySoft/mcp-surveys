@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 
 from redis.asyncio import Redis
+from redis.exceptions import WatchError
 
 from mcp_surveys.errors import SurveyNotFound
 from mcp_surveys.models import Survey, SurveyStats
@@ -13,6 +15,9 @@ class SurveyStore(Protocol):
         ...
 
     async def save(self, survey: Survey, ttl_seconds: int) -> None:
+        ...
+
+    async def update(self, survey_id: str, mutate: Callable[[Survey], int]) -> Survey:
         ...
 
     async def increment_stat(self, name: str) -> None:
@@ -51,6 +56,24 @@ class RedisSurveyStore:
 
     async def save(self, survey: Survey, ttl_seconds: int) -> None:
         await self.client.set(self._key(survey.id), survey.model_dump_json(), ex=max(1, ttl_seconds))
+
+    async def update(self, survey_id: str, mutate: Callable[[Survey], int]) -> Survey:
+        key = self._key(survey_id)
+        while True:
+            async with self.client.pipeline(transaction=True) as pipeline:
+                try:
+                    await pipeline.watch(key)
+                    raw = await pipeline.get(key)
+                    if not raw:
+                        raise SurveyNotFound("survey is missing or expired")
+                    survey = Survey.model_validate_json(raw)
+                    ttl_seconds = mutate(survey)
+                    pipeline.multi()
+                    pipeline.set(key, survey.model_dump_json(), ex=max(1, ttl_seconds))
+                    await pipeline.execute()
+                    return survey
+                except WatchError:
+                    continue
 
     async def increment_stat(self, name: str) -> None:
         await self.client.hincrby(self._stats_key(), name, 1)

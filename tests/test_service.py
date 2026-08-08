@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 
 import pytest
 from pydantic import ValidationError
 
 from mcp_surveys.errors import RateLimitExceeded, SurveyValidationError
-from mcp_surveys.models import AnswerIn, CreateEncryptedSurveyRequest, CreateSurveyRequest, EncryptedBlob, Option, Question, Survey, SurveyCrypto, SurveyResponse
+from mcp_surveys.models import AnswerIn, CreateEncryptedSurveyRequest, CreateSurveyRequest, EncryptedBlob, Option, Question, Survey, SurveyCrypto, SurveyPatch, SurveyResponse
 from mcp_surveys.service import SurveyService, now_utc
 
 
@@ -23,6 +24,12 @@ class MemoryStore:
         self.items[survey.id] = survey
         self.ttls[survey.id] = ttl_seconds
 
+    async def update(self, survey_id, mutate):
+        survey = self.items[survey_id]
+        ttl_seconds = mutate(survey)
+        self.ttls[survey_id] = ttl_seconds
+        return survey
+
     async def increment_stat(self, name):
         self.stats[name] = self.stats.get(name, 0) + 1
 
@@ -36,6 +43,61 @@ class MemoryStore:
 
     async def close(self):
         pass
+
+
+class ConcurrentMemoryStore(MemoryStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.synchronize_reads = False
+        self.read_count = 0
+        self.read_barrier = asyncio.Event()
+        self.update_lock = asyncio.Lock()
+
+    async def get(self, survey_id):
+        snapshot = self.items[survey_id].model_copy(deep=True)
+        if self.synchronize_reads:
+            self.read_count += 1
+            if self.read_count == 2:
+                self.read_barrier.set()
+            await self.read_barrier.wait()
+        return snapshot
+
+    async def update(self, survey_id, mutate):
+        async with self.update_lock:
+            survey = self.items[survey_id].model_copy(deep=True)
+            ttl_seconds = mutate(survey)
+            self.items[survey_id] = survey
+            self.ttls[survey_id] = ttl_seconds
+            return survey.model_copy(deep=True)
+
+
+class MutationRaceStore(ConcurrentMemoryStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.pause_next_mutation = False
+        self.mutation_paused = False
+        self.snapshot_taken = asyncio.Event()
+        self.resume_mutation = asyncio.Event()
+
+    async def _pause_if_requested(self):
+        if self.pause_next_mutation and not self.mutation_paused:
+            self.mutation_paused = True
+            self.snapshot_taken.set()
+            await self.resume_mutation.wait()
+
+    async def get(self, survey_id):
+        survey = self.items[survey_id].model_copy(deep=True)
+        await self._pause_if_requested()
+        return survey
+
+    async def update(self, survey_id, mutate):
+        async with self.update_lock:
+            survey = self.items[survey_id].model_copy(deep=True)
+            await self._pause_if_requested()
+            ttl_seconds = mutate(survey)
+            self.items[survey_id] = survey
+            self.ttls[survey_id] = ttl_seconds
+            return survey.model_copy(deep=True)
 
 
 class CountingLimiter:
@@ -95,6 +157,96 @@ async def test_create_save_complete_and_read_answers():
 
 
 @pytest.mark.asyncio
+async def test_concurrent_answers_do_not_overwrite_each_other():
+    store = ConcurrentMemoryStore()
+    service = SurveyService(store, "https://survey.test", 3600, 10800)
+    created = await service.create_survey(
+        CreateSurveyRequest(
+            title="Parallel answers",
+            questions=[
+                Question(id="q1", type="text", prompt="First?"),
+                Question(id="q2", type="text", prompt="Second?"),
+            ],
+        )
+    )
+    store.synchronize_reads = True
+
+    await asyncio.gather(
+        service.save_answer(created.survey_id, "q1", AnswerIn(value="one")),
+        service.save_answer(created.survey_id, "q2", AnswerIn(value="two")),
+    )
+
+    store.synchronize_reads = False
+    answers = await service.get_answers(created.survey_id, created.result_token)
+    assert {answer.question_id: answer.answer for answer in answers.answers} == {
+        "q1": "one",
+        "q2": "two",
+    }
+
+
+@pytest.mark.asyncio
+async def test_required_questions_must_be_answered_before_completion():
+    store = MemoryStore()
+    service = SurveyService(store, "https://survey.test", 3600, 10800)
+    created = await service.create_survey(
+        CreateSurveyRequest(
+            title="Required answer",
+            questions=[Question(id="q1", type="text", prompt="Required?", required=True)],
+        )
+    )
+
+    with pytest.raises(SurveyValidationError, match=r"all required questions must be answered \(0/1\)"):
+        await service.complete_survey(created.survey_id)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_edit_does_not_erase_answer():
+    store = MutationRaceStore()
+    service = SurveyService(store, "https://survey.test", 3600, 10800)
+    created = await service.create_survey(
+        CreateSurveyRequest(
+            title="Concurrent edit",
+            questions=[Question(id="q1", type="text", prompt="Answer?")],
+        )
+    )
+    store.pause_next_mutation = True
+
+    edit = asyncio.create_task(
+        service.edit_survey(created.survey_id, created.result_token, SurveyPatch(description="Updated"))
+    )
+    await store.snapshot_taken.wait()
+    answer = asyncio.create_task(service.save_answer(created.survey_id, "q1", AnswerIn(value="kept")))
+    await asyncio.sleep(0)
+    store.resume_mutation.set()
+    await asyncio.gather(edit, answer)
+
+    stored = await service.get_answers(created.survey_id, created.result_token)
+    assert stored.answers[0].answer == "kept"
+
+
+@pytest.mark.asyncio
+async def test_observability_labels_are_bounded():
+    store = MemoryStore()
+    service = SurveyService(store, "https://survey.test", 3600, 10800)
+
+    await service.record_event(
+        "agent_requests",
+        {
+            "client": "attacker-controlled-client-name",
+            "version": "999.123.456-custom",
+            "mode": "attacker-mode",
+            "unrecognized": "must-not-be-recorded",
+        },
+    )
+
+    stats = await service.get_stats()
+    assert stats.breakdown["agent_requests.client.other"] == 1
+    assert stats.breakdown["agent_requests.version.other"] == 1
+    assert stats.breakdown["agent_requests.mode.other"] == 1
+    assert all("attacker" not in key and "unrecognized" not in key for key in stats.breakdown)
+
+
+@pytest.mark.asyncio
 async def test_encrypted_survey_keeps_spec_opaque_and_accepts_encrypted_answers():
     store = MemoryStore()
     service = SurveyService(store, "https://survey.test", 3600, 10800)
@@ -144,6 +296,41 @@ async def test_encrypted_survey_keeps_spec_opaque_and_accepts_encrypted_answers(
     assert stats.breakdown["created.version.0.5.1"] == 1
     assert stats.breakdown["created.client_version_mode.python-cli.0.5.1.e2ee_full"] == 1
     assert stats.breakdown["answers_saved.mode.e2ee_full"] == 1
+
+
+@pytest.mark.asyncio
+async def test_v2_encrypted_answer_rejects_unknown_envelope_fields():
+    store = MemoryStore()
+    service = SurveyService(store, "https://survey.test", 3600, 10800)
+    context_id = "c" * 43
+    created = await service.create_survey(
+        CreateEncryptedSurveyRequest(
+            crypto=SurveyCrypto(
+                v=2,
+                context_id=context_id,
+                spec=EncryptedBlob(v=2, nonce="nonce", ciphertext="ciphertext"),
+                answer_public_key_spki="public-key",
+                question_ids=["q1"],
+                required_question_ids=["q1"],
+            )
+        )
+    )
+    envelope = {
+        "marker": "__mcp_surveys_encrypted_answer_v2__",
+        "v": 2,
+        "alg": "RSA-OAEP-256+A256GCM",
+        "context_id": context_id,
+        "survey_id": created.survey_id,
+        "question_id": "q1",
+        "revision": 1,
+        "encrypted_key": "key",
+        "nonce": "nonce",
+        "ciphertext": "ciphertext",
+        "unexpected": "smuggled metadata",
+    }
+
+    with pytest.raises(SurveyValidationError, match="missing or unknown fields"):
+        await service.save_answer(created.survey_id, "q1", AnswerIn(value=envelope))
 
 
 @pytest.mark.asyncio

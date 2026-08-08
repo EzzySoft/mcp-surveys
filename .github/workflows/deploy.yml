@@ -44,18 +44,33 @@ jobs:
 
           ssh -i ~/.ssh/claw_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" <<'REMOTE'
           set -euo pipefail
-          cd ~/mcp-surveys
+          cd "$HOME/.local/share/mcp-surveys"
+
+          if [ "$(git branch --show-current)" != "main" ]; then
+            echo "Refusing to deploy from a branch other than main" >&2
+            git status --short --branch >&2
+            exit 1
+          fi
+
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Refusing to deploy over production changes" >&2
+            git status --short >&2
+            exit 1
+          fi
+
           git pull --ff-only origin main
-          docker compose up -d --build
-          docker compose ps
-          for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18173/health; then
-              echo
-              exit 0
-            fi
-            echo "Waiting for app health check, attempt ${attempt}/30"
-            sleep 2
-          done
-          docker compose logs --no-color --tail=100 app
-          exit 1
+          uv sync --extra dev --frozen
+          uv run pytest -q
+
+          compose=(docker compose -p mcp-surveys -f compose.yaml -f compose.server.yaml)
+          if ! "${compose[@]}" up -d --build --wait --wait-timeout 180; then
+            "${compose[@]}" logs --no-color --tail=100 app
+            exit 1
+          fi
+
+          "${compose[@]}" ps
+          curl --noproxy '*' -fsS http://127.0.0.1:18173/health
+          echo
+          curl --noproxy '*' -fsS https://mcp.voevoda-sailing.ru/health
+          echo
           REMOTE
